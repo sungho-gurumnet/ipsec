@@ -1,0 +1,15 @@
+POST /vm/1/stdio HTTP/1.1
+Transfer-Encoding: chunked
+
+16
+0
+1
+d
+Hello World
+
+14
+0
+2
+b
+Hello World
+
