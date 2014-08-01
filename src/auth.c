@@ -2,7 +2,9 @@
 
 static void _hmac_md5(void* payload, size_t size, unsigned char* result) 
 {
-	result = HMAC(EVP_md5(), &(current_sa->esp_auth_key), 16, payload, size , NULL, NULL);
+	unsigned char* temp = (unsigned char*)malloc(16);
+	temp = HMAC(EVP_md5(), &(current_sa->esp_auth_key), 16, payload, size , NULL, NULL);
+	memcpy(result, temp, 12);
 }
 
 static void _hmac_sha1(void* payload, size_t size, unsigned char* result) 

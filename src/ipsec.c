@@ -51,7 +51,7 @@ int decrypt(IP* packet)
 	{
 		size = endian16(packet->length) - (packet->ihl * 4) - ICV_LEN; 
 		
-		unsigned char* result = (unsigned char*)malloc(4);
+		unsigned char* result = (unsigned char*)malloc(12);
 		
 		((Authentication*)(current_sa->auth))->authenticate(&(packet->body), size, result);
 	
@@ -95,8 +95,8 @@ int decrypt(IP* packet)
 			packet->length = endian16(packet_len);
 			
 			if(current_sa->iv_mode == true) 
-				packet->length -= endian16(ICV_LEN);
-			
+				packet->length = endian16(packet_len - ICV_LEN);
+		
 			break;
 		
 		case IP_PROTOCOL_AH : 	
@@ -113,22 +113,22 @@ int decrypt(IP* packet)
 	}
 
 
-/*
+
 	printf("Decrypted Packet : \n");
 	
-	Ether* ether = (Ether*)malloc(200);
-	memmove(ether->payload, packet, 200) ; 
+	Ether* ether = (Ether*)malloc(250);
+	memmove(ether->payload, packet, 250) ; 
 	int i;
 	for(i = 1; i < 1 + endian16(packet->length); i++)
 	{
-		printf("%02x ", ether1->payload[i - 1]); // Packet - IP Header 
+		printf("%02x ", ether->payload[i - 1]); // Packet - IP Header 
 		if( i % 16 == 0 )
 			printf("\n");
 	}
 	printf("\n");
 
 	free(ether);
-*/	
+	
 	return 0;
 }
 
@@ -222,15 +222,17 @@ int encrypt(IP* packet)
 				packet->destination = endian32(current_sp->t_dst_ip);
 			}
 
-			if(current_sa->iv_mode == true) 
+			if(current_sa->iv_mode == true)
+			{
 				packet->length += endian16(ICV_LEN);
-			
+			}
+
 			packet->ttl = endian8(64);
 			packet->checksum = 0;
 			packet->checksum = endian16(checksum(packet, packet->ihl * 4));
 			
 			// 4.2 ESP Header Addition
-			memmove(packet->body + ESP_HEADER_LEN, packet->body, endian16(packet->length));
+			memmove(packet->body + ESP_HEADER_LEN, packet->body, endian16(packet->length) - packet->ihl * 4 - ESP_HEADER_LEN);
 			
 			ESP* esp = (ESP*)packet->body;
 			esp->spi = endian32(current_sa->spi);
@@ -245,8 +247,7 @@ int encrypt(IP* packet)
 			{
 				size = endian16(packet->length) - (packet->ihl * 4) - ICV_LEN; 
 				unsigned char* result = &(packet->body[size]);
-				
-				((Authentication*)(current_sa->auth))->authenticate(packet, size, result);
+				((Authentication*)(current_sa->auth))->authenticate(&(packet->body), size, result);
 			}
 			break;
 		case IP_PROTOCOL_AH :
@@ -255,22 +256,22 @@ int encrypt(IP* packet)
 			break;
 	}
 
-/*
+
 	printf("Encrypted Packet : \n");
 
-	Ether* ether = (Ether*)malloc(250);
-	memmove(ether->payload, packet, 250) ; 
+	Ether* ether1 = (Ether*)malloc(250);
+	memmove(ether1->payload, packet, 250) ; 
 	
-	for(i = 1; i < 1 + endian16(packet->length); i++) 
+	for(i = 1; i < 1 + endian16(packet->length) ; i++) 
 	{
-		printf("%02x ", ether->payload[i - 1]); // Packet - IP Header 
+		printf("%02x ", ether1->payload[i - 1]); // Packet - IP Header 
 		if( i % 16 == 0 )
 			printf("\n");
 	}
 	printf("\n");
 	
-	free(ether);
-*/
+	free(ether1);
+
 	return 0;
 }
 

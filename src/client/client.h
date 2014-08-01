@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <net/ip.h>
 #include "setkey.h"
-#include "sender.h"
 
 // CRYPTO_ALGORITHM
 #define CRYPTO_DES_CBC			0x01

@@ -21,8 +21,6 @@ int setkey_add(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi,
 				sa->esp_crypto_key[0] = crypto_key[0];
 				sa->esp_crypto_key[1] = crypto_key[1];
 				sa->esp_crypto_key[2] = crypto_key[2];
-				printf("crypto key[0] : %lx\n", crypto_key[0]);
-			//	memecpy(sa->esp_crypto_key, crypto_key, 24);
 			}
 			if(auth_algorithm != 0)
 			{
@@ -137,12 +135,9 @@ int setkey_flush(uint8_t protocol)
 	struct list_head* pos = 0;
 	struct list_head* q = 0;
 
-	printf("setkey_flush in\n");
-	printf("sad.size = %d\n", sad.size);
 	if(sad.size == 0)
 		return 0;
 
-	printf("an de yo 1\n");
 	for (pos = (&((sad.sa_list)->list))->next, q = pos->next; pos != (&((sad.sa_list)->list)); pos = q, q = pos->next)
 	//list_for_each_safe(pos, q, &((sad.sa_list)->list));
 	{
@@ -231,15 +226,8 @@ int setkey_spdflush()
 	struct list_head* pos;
 	struct list_head* q;
 
-	printf("setkey_spdflush in \n");
-	printf("spd.size = %d\n", spd.size);
-
 	if(spd.size == 0)
 		return 0;
-
-	printf("andeyo 2\n");
-	printf("spd.sp_list->list : %p\n",&((spd.sp_list)->list));
-	printf("spd.sp_list->list->next : %p\n", (&((spd.sp_list)->list))->next);
 	/*
 	list_for_each_entry(tmp, &((spd.sp_list)->list), list)
 	{

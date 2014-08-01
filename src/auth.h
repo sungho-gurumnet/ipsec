@@ -2,6 +2,7 @@
 #define __AUTH_H__
 
 #include <stdio.h>
+#include <string.h>
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <openssl/engine.h>

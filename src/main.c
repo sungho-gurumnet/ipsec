@@ -17,12 +17,22 @@ NetworkInterface* ni1;
 void ginit(int argc, char** argv) {
 	ni0 = ni_get(0);
 	ni0->config = map_create(8, map_string_hash, map_string_equals, malloc, free);
+#ifdef _GW1_
 	map_put(ni0->config, "ip", (void*)(uint64_t)0xac100001);	// 172.16.0.1
+#endif
+#ifdef _GW2_
+	map_put(ni0->config, "ip", (void*)(uint64_t)0xac100002);	// 172.16.0.2
+#endif
 	map_put(ni0->config, "netmask", (void*)(uint64_t)0xffffff00);
 	
 	ni1 = ni_get(1);
 	ni1->config = map_create(8, map_string_hash, map_string_equals, malloc, free);
+#ifdef _GW1_
 	map_put(ni1->config, "ip", (void*)(uint64_t)0xc0a8c80a);	// 192.168.200.10
+#endif
+#ifdef _GW2_
+	map_put(ni1->config, "ip", (void*)(uint64_t)0xc0a8640a);	// 192.168.100.10
+#endif
 	map_put(ni1->config, "netmask", (void*)(uint64_t)0xffffff00);
 	
 	init_list();
@@ -41,13 +51,16 @@ void process0(NetworkInterface* ni) {	// Packets from Internet
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 	
 	IP* ip = (IP*)ether->payload;
-	
+
+	printf("- Ethernet Header -\n");
+	printf("Dst Mac : %012lx Src Mac : %012lx\n Ether Type : %x\n", 
+			endian48(ether->dmac), endian48(ether->smac), ether->type);
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
 		
 		if(ip->protocol == IP_PROTOCOL_ESP){
 			
 			int orig_len = endian16(ip->length);
-/*
+
 			printf("Packet : \n");
 			for(int i = 1; i < 1 + endian16(ip->length); i++)
 			{
@@ -56,7 +69,7 @@ void process0(NetworkInterface* ni) {	// Packets from Internet
 					printf("\n");
 			}
 			printf("\n");
-*/
+
 
 			if(decrypt(ip) >= 0)
 			{
@@ -86,7 +99,7 @@ void process1(NetworkInterface* ni) {	// Packets from Intranet
 	
 	IP* ip = (IP*)ether->payload;
 	
-	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
+	if(endian16(ether->type) == ETHER_TYPE_IPv4 && endian48(ether->dmac) != 0xffffffffffff) {
 		
 		int orig_len = endian16(ip->length);
 		

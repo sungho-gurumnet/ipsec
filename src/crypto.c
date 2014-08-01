@@ -31,6 +31,7 @@ static void _3des_cbc_encrypt(void* payload, size_t size)
 							size , &ks1, &ks2, &ks3, &iv, DES_ENCRYPT);
 /*
 	ESP* esp = (ESP*)payload;
+	
 	printf("\nEncrypted : \n");
 	int i;
 	for(i = 1; i < 65; i++)
@@ -41,6 +42,7 @@ static void _3des_cbc_encrypt(void* payload, size_t size)
 	}
 	printf("\n");
 */
+
 }
 
 void _3des_cbc_decrypt(void* payload, size_t size) 
@@ -71,7 +73,8 @@ void _3des_cbc_decrypt(void* payload, size_t size)
 	DES_ede3_cbc_encrypt((const unsigned char*)esp->body, 
 							(unsigned char*)esp->body, 
 							size , &ks1, &ks2, &ks3, &iv, DES_DECRYPT);
-/*	
+	
+/*
 	printf("\nDecrypted : \n");
 	int i;
 	for(i = 1; i < 65; i++)
@@ -219,22 +222,46 @@ static void _rijndael_cbc_encrypt(void* payload, size_t size)
 	AES_cbc_encrypt((const unsigned char *)payload,
 			(unsigned char *)payload,
 			size, key, (unsigned char *)(&(current_sa->iv)), AES_ENCRYPT);
-}
 
+	ESP* esp = (ESP*)payload;
+	printf("\nEncrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+}
 static void _rijndael_cbc_decrypt(void* payload, size_t size)
 {
 	AES_KEY* key = calloc(1, sizeof(AES_KEY));
 	
 	ESP* esp = (ESP*)payload;
 	
+	unsigned char* iv = (unsigned char*)malloc(8);
+	memcpy(iv, &(esp->iv), 8);
 	// TODO : Variable Key Length
 	AES_set_decrypt_key((const unsigned char*)(&(current_sa->esp_crypto_key[0])), 128, key);
 	
+	printf("iv : %lx\n", esp->iv);
 	AES_cbc_encrypt((const unsigned char *)esp->body, 
 			(unsigned char *)esp->body, 
-			size, key, (unsigned char *)(&(esp->iv)), AES_DECRYPT);
+			size, key, iv, AES_DECRYPT);
+	printf("iv : %lx\n", esp->iv);
+	printf("body : %02x %02x %02x %02x\n", esp->body[0], esp->body[1], esp->body[2], esp->body[3]);
+printf(" size : %d\n", size);
+	printf("\nDecrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
 }
-
 static void _twofish_cbc_encrypt(void* payload, size_t size)
 {
 
