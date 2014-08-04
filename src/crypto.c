@@ -222,7 +222,7 @@ static void _rijndael_cbc_encrypt(void* payload, size_t size)
 	AES_cbc_encrypt((const unsigned char *)payload,
 			(unsigned char *)payload,
 			size, key, (unsigned char *)(&(current_sa->iv)), AES_ENCRYPT);
-
+/*
 	ESP* esp = (ESP*)payload;
 	printf("\nEncrypted : \n");
 	int i;
@@ -233,6 +233,7 @@ static void _rijndael_cbc_encrypt(void* payload, size_t size)
 				printf("\n");
 	}
 	printf("\n");
+*/
 }
 
 static void _rijndael_cbc_decrypt(void* payload, size_t size)
@@ -246,13 +247,10 @@ static void _rijndael_cbc_decrypt(void* payload, size_t size)
 	// TODO : Variable Key Length
 	AES_set_decrypt_key((const unsigned char*)(&(current_sa->esp_crypto_key[0])), 128, key);
 	
-	printf("iv : %lx\n", esp->iv);
 	AES_cbc_encrypt((const unsigned char *)esp->body, 
 			(unsigned char *)esp->body, 
 			size, key, iv, AES_DECRYPT);
-	printf("iv : %lx\n", esp->iv);
-	printf("body : %02x %02x %02x %02x\n", esp->body[0], esp->body[1], esp->body[2], esp->body[3]);
-printf(" size : %d\n", size);
+/*
 	printf("\nDecrypted : \n");
 	int i;
 	for(i = 1; i < 65; i++)
@@ -262,6 +260,7 @@ printf(" size : %d\n", size);
 				printf("\n");
 	}
 	printf("\n");
+*/
 }
 static void _twofish_cbc_encrypt(void* payload, size_t size)
 {

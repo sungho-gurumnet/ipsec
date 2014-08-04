@@ -53,15 +53,17 @@ void process0(NetworkInterface* ni)
 
 	IP* ip = (IP*)ether->payload;
 
+/*
 	printf("- Ethernet Header -\n");
 	printf("Dst Mac : %012lx Src Mac : %012lx\n Ether Type : %x\n", 
 			endian48(ether->dmac), endian48(ether->smac), ether->type);
+*/
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
 
 		if(ip->protocol == IP_PROTOCOL_ESP){
 
 			int orig_len = endian16(ip->length);
-
+	/*
 			printf("Packet : \n");
 			for(int i = 1; i < 1 + endian16(ip->length); i++)
 			{
@@ -70,7 +72,7 @@ void process0(NetworkInterface* ni)
 					printf("\n");
 			}
 			printf("\n");
-
+	*/
 
 			if(decrypt(ip) >= 0)
 			{
@@ -78,11 +80,11 @@ void process0(NetworkInterface* ni)
 
 				ether->dmac = endian48(arp_get_mac(ni1, endian32(ip->destination)));
 				ether->smac = endian48(ni1->mac);
-				
+		/*				
 				printf("- Ethernet Header After Decryption-\n");
 				printf("Dst Mac : %012lx Src Mac : %012lx\n Ether Type : %x\n", 
 						endian48(ether->dmac), endian48(ether->smac), ether->type);
-
+		*/
 				ni_output(ni1, packet);
 				packet = NULL;
 			}
@@ -104,7 +106,7 @@ void process1(NetworkInterface* ni)
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 
 	IP* ip = (IP*)ether->payload;
-	
+/*	
 	printf("- Ethernet Header -\n");
 	printf("Dst Mac : %012lx Src Mac : %012lx\n Ether Type : %x\n", 
 			endian48(ether->dmac), endian48(ether->smac), ether->type);
@@ -117,7 +119,7 @@ void process1(NetworkInterface* ni)
 			printf("\n");
 	}
 	printf("\n");
-
+*/
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) 
 	{
 		if(ip->protocol == IP_PROTOCOL_UDP) 
@@ -182,11 +184,11 @@ void process1(NetworkInterface* ni)
 				packet->end += (endian16(ip->length) - orig_len);
 				ether->dmac = endian48(arp_get_mac(ni0, endian32(ip->destination)));
 				ether->smac = endian48(ni0->mac);
-				
+			/*
 				printf("- Ethernet Header After Encryption-\n");
 				printf("Dst Mac : %012lx Src Mac : %012lx\n Ether Type : %x\n", 
 						endian48(ether->dmac), endian48(ether->smac), ether->type);
-
+			*/
 				ni_output(ni0, packet);
 				packet = NULL;
 			}

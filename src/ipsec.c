@@ -112,8 +112,6 @@ int decrypt(IP* packet)
 		return -1;
 	}
 
-
-
 	printf("Decrypted Packet : \n");
 	
 	Ether* ether = (Ether*)malloc(250);
