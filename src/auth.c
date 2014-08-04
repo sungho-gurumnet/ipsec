@@ -9,7 +9,10 @@ static void _hmac_md5(void* payload, size_t size, unsigned char* result)
 
 static void _hmac_sha1(void* payload, size_t size, unsigned char* result) 
 {
+	unsigned char* temp = (unsigned char*)malloc(20);
+	temp = HMAC(EVP_sha1(), &(current_sa->esp_auth_key), 20, payload, size , NULL, NULL);
 
+	memcpy(result, temp, 12);
 }
 
 Authentication authentications[] =

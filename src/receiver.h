@@ -17,7 +17,12 @@
 #define SETKEY_SPDFLUSH		0x14	
 #define SETKEY_SPDDUMP		0x15
 
+#ifdef _GW1_
 #define SETKEY_PORT_NUM 	1234
+#endif
+#ifdef _GW2_
+#define SETKEY_PORT_NUM 	4321
+#endif
 
 typedef struct
 {
@@ -33,7 +38,7 @@ typedef struct
 	uint8_t crypto_algorithm;
 	uint8_t auth_algorithm;
 	uint64_t crypto_key[3];
-	uint64_t auth_key[2];
+	uint64_t auth_key[3];
 	uint8_t upperspec;
 	uint8_t direction;
 	uint8_t action;

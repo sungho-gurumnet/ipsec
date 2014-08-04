@@ -26,11 +26,12 @@
 
 #ifdef _GW1_
 #define IPSEC_ADDR			"192.168.200.10"
+#define IPSEC_PORT	 		1234
 #endif
 #ifdef _GW2_
 #define IPSEC_ADDR			"192.168.100.10"
+#define IPSEC_PORT	 		4321
 #endif
-#define IPSEC_PORT	 		1234
 
 typedef struct
 {
@@ -46,7 +47,7 @@ typedef struct
 	uint8_t crypto_algorithm;
 	uint8_t auth_algorithm;
 	uint64_t crypto_key[3];
-	uint64_t auth_key[2];
+	uint64_t auth_key[3];
 	uint8_t upperspec;
 	uint8_t direction;
 	uint8_t action;

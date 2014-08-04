@@ -19,7 +19,6 @@ int parse(Parameter* parameter)
 					parameter->crypto_key,
 					parameter->auth_key
 					);
-					printf("protocol : %x\n", parameter->protocol);
 			break;
 		
 		case SETKEY_GET :		
@@ -84,7 +83,6 @@ int parse(Parameter* parameter)
 					parameter->level
 					);
 
-			printf("src_mask : %x dst_mask : %x\n", parameter->src_mask, parameter->dst_mask);
 			break;
 		
 		case SETKEY_SPDUPDATE :

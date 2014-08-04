@@ -7,10 +7,13 @@ SP* getSP(IP* packet)
 
 	list_for_each_entry(tmp, &((spd.sp_list)->list), list)
 	{
+//		printf("packet->source : %p, spd->source : %p\n",(endian32(packet->source) & tmp->src_mask), (tmp->src_ip & tmp->src_mask));
 		if((endian32(packet->source) & tmp->src_mask) == (tmp->src_ip & tmp->src_mask))
 		{
+//			printf("packet->destination : %p, spd->destination : %p\n",(endian32(packet->destination) & tmp->dst_mask), (tmp->dst_ip & tmp->dst_mask));
 			if((endian32(packet->destination) & tmp->dst_mask) == (tmp->dst_ip & tmp->dst_mask))
 			{
+//				printf("spd->upperspec : %d, packet->protocol : %d\n", tmp->upperspec, packet->protocol);
 				if(tmp->upperspec == IP_PROTOCOL_ANY)
 					return tmp;
 				else if(packet->protocol == tmp->upperspec)

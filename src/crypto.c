@@ -234,6 +234,7 @@ static void _rijndael_cbc_encrypt(void* payload, size_t size)
 	}
 	printf("\n");
 }
+
 static void _rijndael_cbc_decrypt(void* payload, size_t size)
 {
 	AES_KEY* key = calloc(1, sizeof(AES_KEY));

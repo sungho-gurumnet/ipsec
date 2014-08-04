@@ -27,12 +27,14 @@ int setkey_add(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi,
 				sa->iv_mode = true;
 				sa->esp_auth_key[0] = auth_key[0];
 				sa->esp_auth_key[1] = auth_key[1];
+				sa->esp_auth_key[2] = auth_key[2];
 			}
 		break;
 			
 		case IP_PROTOCOL_AH :
 			sa->ah_key[0] = auth_key[0];
 			sa->ah_key[1] = auth_key[1];
+			sa->ah_key[2] = auth_key[2];
 		break;
 		
 		default : break;
@@ -171,7 +173,7 @@ int setkey_dump(uint8_t protocol)
 			printf("ESP Auth Algorithm : %x\n", tmp->esp_auth_algorithm); 
 			printf("Mode ( 1: Transport, 2: Tunnel ) : %d\n", tmp->mode);
 			printf("Crypto Key : 0x%lx%lx%lx\n", tmp->esp_crypto_key[0], tmp->esp_crypto_key[1], tmp->esp_crypto_key[2]);
-			printf("Auth Key : 0x%lx%lx%lx\n", tmp->esp_crypto_key[0], tmp->esp_crypto_key[1], tmp->esp_crypto_key[2]);
+			printf("Auth Key : 0x%lx%lx%lx\n", tmp->esp_auth_key[0], tmp->esp_auth_key[1], tmp->esp_auth_key[2]);
 			printf("\n");
 		}
 	}
@@ -199,12 +201,8 @@ int setkey_spdadd(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t 
 	sp->level = level;
 	sp->sa_pointer = NULL;
 
-	printf("spd.sp_list->list : %p\n",&((spd.sp_list)->list));
 	list_add_head(&(sp->list), &((spd.sp_list)->list));
-	printf(" sp->list address : %p\n", &(sp->list));
-	spd.size++;
-	printf(" sp address : %p\n", sp);	
-	printf("spd.sp_list->list : %p\n",&((spd.sp_list)->list));
+
 	return 0;
 }
 
@@ -240,7 +238,7 @@ int setkey_spdflush()
 	for (pos = (&((spd.sp_list)->list))->next, q = pos->next; pos != (&((spd.sp_list)->list)); pos = q, q = pos->next)
 //	list_for_each_safe(pos, q, &((spd.sp_list)->list));
 	{
-		printf("head->next : %p\n", (&((spd.sp_list)->list))->next);
+		/*printf("head->next : %p\n", (&((spd.sp_list)->list))->next);
 		
 		printf("tmp : %p\n", tmp);
 		printf("pos : %p\n", pos);
@@ -248,12 +246,12 @@ int setkey_spdflush()
 		tmp = list_entry(pos, SP, list);
 		printf("tmp : %p\n", tmp);
 		printf("pos : %p\n", pos);
-		printf("pos->next : %p spd.sp_list->list : %p\n", pos->next, &((spd.sp_list)->list));
+		printf("pos->next : %p spd.sp_list->list : %p\n", pos->next, &((spd.sp_list)->list));*/
 		list_del(pos);
 		free(tmp);
 		spd.size--;
 	}
-	printf("spd.sp_list->list after : %p\n",&((spd.sp_list)->list));
+//	printf("spd.sp_list->list after : %p\n",&((spd.sp_list)->list));
 	return 0;
 }
 

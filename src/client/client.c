@@ -89,19 +89,20 @@ int main(void)
 		0xaeaeaeaeaeaeaeae,
 		0xaeaeaeaeaeaeaeae
 	};
-	uint64_t auth_key[2] = 
+	uint64_t auth_key[3] = 
 	{
 		0xaeaeaeaeaeaeaeae,
-		0xaeaeaeaeaeaeaeae
+		0xaeaeaeaeaeaeaeae,
+		0xaeaeaeae
 	};
 
 	setkey_add(0xac100001, 0xac100002, 
-			IP_PROTOCOL_ESP, 0x201, TUNNEL, CRYPTO_3DES_CBC, 
-			AUTH_HMAC_MD5, crypto_key, auth_key);
+			IP_PROTOCOL_ESP, 0x201, TUNNEL, CRYPTO_RIJNDAEL_CBC, 
+			AUTH_HMAC_SHA1, crypto_key, auth_key);
 
 	setkey_add(0xac100002, 0xac100001,
-			IP_PROTOCOL_ESP, 0x301, TUNNEL, CRYPTO_3DES_CBC, 
-			AUTH_HMAC_MD5, crypto_key, auth_key);
+			IP_PROTOCOL_ESP, 0x301, TUNNEL, CRYPTO_RIJNDAEL_CBC, 
+			AUTH_HMAC_SHA1, crypto_key, auth_key);
 	
 	setkey_spddump();
 	setkey_dump(0);
