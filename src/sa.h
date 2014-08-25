@@ -27,7 +27,7 @@ typedef struct _SA
 	uint8_t esp_crypto_algorithm;
 	uint64_t esp_crypto_key[3];
 	uint8_t esp_auth_algorithm;
-	uint64_t esp_auth_key[3];
+	uint64_t esp_auth_key[8];
 	uint8_t ah_algorithm;
 	uint64_t ah_key[3];
 	uint64_t iv;

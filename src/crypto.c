@@ -144,9 +144,25 @@ static void _blowfish_cbc_encrypt(void* payload, size_t size)
 	
 	RAND_bytes((unsigned char*)(&(current_sa->iv)), 8);
 	
+	unsigned char iv[8];
+	memcpy(iv, &(current_sa->iv), 8);
+	
 	BF_cbc_encrypt((const unsigned char *)payload, 
 			(unsigned char *)payload, 
-			size, key, (unsigned char *)(&(current_sa->iv)), BF_ENCRYPT);
+			size, key, (unsigned char *)iv, BF_ENCRYPT);
+
+	ESP* esp = (ESP*)payload;
+	
+	printf("\nEncrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+
 }
 
 static void _blowfish_cbc_decrypt(void* payload, size_t size)
@@ -161,6 +177,17 @@ static void _blowfish_cbc_decrypt(void* payload, size_t size)
 	BF_cbc_encrypt((const unsigned char *)esp->body, 
 			(unsigned char *)esp->body, 
 			size, key, (unsigned char *)(&(esp->iv)), BF_DECRYPT);
+
+	printf("\nDecrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+
 }
 
 // Key Length : 5 ~ 56 Bytes (Default : 16 Bytes)
@@ -173,9 +200,25 @@ static void _cast128_cbc_encrypt(void* payload, size_t size)
 
 	RAND_bytes((unsigned char*)(&(current_sa->iv)), 8);
 
+	unsigned char iv[8];
+	memcpy(iv, &(current_sa->iv), 8);
+	
 	CAST_cbc_encrypt((const unsigned char *)payload,
 			(unsigned char *)payload,
-			size, key, (unsigned char *)(&(current_sa->iv)), CAST_ENCRYPT);
+			size, key, (unsigned char *)iv, CAST_ENCRYPT);
+/*
+	ESP* esp = (ESP*)payload;
+	
+	printf("\nEncrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+*/
 }
 
 static void _cast128_cbc_decrypt(void* payload, size_t size)
@@ -190,23 +233,50 @@ static void _cast128_cbc_decrypt(void* payload, size_t size)
 	CAST_cbc_encrypt((const unsigned char *)esp->body, 
 			(unsigned char *)esp->body, 
 			size, key, (unsigned char *)(&(esp->iv)), CAST_DECRYPT);
+/*
+	printf("\nDecrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+*/
 }
+
+/*
+ 	Not implemented : NO RFC
+
+   		This Internet-Draft has been deleted. Unrevised documents placed in the
+		Internet-Drafts directories have a maximum life of six months. After
+		that time, they are deleted. This Internet-Draft was not published as
+		an RFC.
+
+		The name of the internet-draft was draft-ietf-ipsec-ciph-des-derived-00.txt
+
+		Internet-Drafts are not an archival document series, and expired
+		drafts, such as this one, are not available; please do not ask for
+		copies... they are not available. The Secretariat does not have
+		information as to future plans of the authors or working groups WRT the
+		deleted Internet-Draft.
+
+		For more information or a copy of the document, contact the author directly.
+
+		Draft Author(s):
+		Phil Karn <pkarn@qualcomm.com>,
+		William Simpson <wsimpson@greendragon.com>,
+		Perry Metzger <perry@piermont.com>
+*/
 static void _des_deriv_encrypt(void* payload, size_t size)
-{
-
-}
+{}
 static void _des_deriv_decrypt(void* payload, size_t size)
-{
-
-}
+{}
 static void _3des_deriv_encrypt(void* payload, size_t size)
-{
-
-}
+{}
 static void _3des_deriv_decrypt(void* payload, size_t size)
-{
-
-}
+{}
 
 // TODO : 16 Byte Alighment for Payload
 // Key Length : 16, 24, 32 Bytes (Default : 16 Bytes)
@@ -219,10 +289,13 @@ static void _rijndael_cbc_encrypt(void* payload, size_t size)
 
 	RAND_bytes((unsigned char*)(&(current_sa->iv)), 8);
 
+	unsigned char iv[8];
+	memcpy(iv, &(current_sa->iv), 8);
+	
 	AES_cbc_encrypt((const unsigned char *)payload,
 			(unsigned char *)payload,
-			size, key, (unsigned char *)(&(current_sa->iv)), AES_ENCRYPT);
-/*
+			size, key, (unsigned char *)iv, AES_ENCRYPT);
+
 	ESP* esp = (ESP*)payload;
 	printf("\nEncrypted : \n");
 	int i;
@@ -233,7 +306,7 @@ static void _rijndael_cbc_encrypt(void* payload, size_t size)
 				printf("\n");
 	}
 	printf("\n");
-*/
+
 }
 
 static void _rijndael_cbc_decrypt(void* payload, size_t size)
@@ -250,6 +323,102 @@ static void _rijndael_cbc_decrypt(void* payload, size_t size)
 	AES_cbc_encrypt((const unsigned char *)esp->body, 
 			(unsigned char *)esp->body, 
 			size, key, iv, AES_DECRYPT);
+
+	printf("\nDecrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+
+}
+/*
+   Not implemented : No openssl function 
+
+   AES and Triple DES are considered to be strong. Blowfish is still a good algorithm but its author (Bruce Schneier) recommends that you should use the "twofish" algorithm instead if available. Unfortunately twofish is not yet available in the list of openssl ciphers.
+*/
+static void _twofish_cbc_encrypt(void* payload, size_t size)
+{
+}
+static void _twofish_cbc_decrypt(void* payload, size_t size)
+{
+}
+static void _aes_ctr_encrypt(void* payload, size_t size)
+{
+
+	AES_KEY* key = calloc(1, sizeof(AES_KEY));
+	unsigned int state_num = 0;
+	unsigned char state_ecount[AES_BLOCK_SIZE];
+
+	memset(state_ecount, 0x0, AES_BLOCK_SIZE);
+
+	// TODO : Variable Key Length
+	AES_set_encrypt_key((const unsigned char*)(&(current_sa->esp_crypto_key[0])), 128, key);
+
+	RAND_bytes((unsigned char*)(&(current_sa->iv)), 8);
+
+	unsigned char iv[8];
+	memcpy(iv, &(current_sa->iv), 8);
+	
+	AES_ctr128_encrypt((const unsigned char *)payload,
+			(unsigned char *)payload,
+			size, key, (unsigned char *)iv, state_ecount, &state_num);
+
+	ESP* esp = (ESP*)payload;
+	printf("\nEncrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+/*
+	ESP* esp = (ESP*)payload;
+		
+	printf("\nEncrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+		{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+*/
+}
+static void _aes_ctr_decrypt(void* payload, size_t size)
+{
+	AES_KEY* key = calloc(1, sizeof(AES_KEY));
+	unsigned int state_num = 0;
+	unsigned char state_ecount[AES_BLOCK_SIZE];
+
+	memset(state_ecount, 0x0, AES_BLOCK_SIZE);
+	
+	ESP* esp = (ESP*)payload;
+	
+	unsigned char* iv = (unsigned char*)malloc(8);
+	memcpy(iv, &(esp->iv), 8);
+	// TODO : Variable Key Length
+	AES_set_decrypt_key((const unsigned char*)(&(current_sa->esp_crypto_key[0])), 128, key);
+	
+	AES_ctr128_encrypt((const unsigned char *)esp->body, 
+			(unsigned char *)esp->body, 
+			size, key, iv, state_ecount, &state_num);
+
+	printf("\nDecrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
 /*
 	printf("\nDecrypted : \n");
 	int i;
@@ -262,22 +431,6 @@ static void _rijndael_cbc_decrypt(void* payload, size_t size)
 	printf("\n");
 */
 }
-static void _twofish_cbc_encrypt(void* payload, size_t size)
-{
-
-}
-static void _twofish_cbc_decrypt(void* payload, size_t size)
-{
-
-}
-static void _aes_ctr_encrypt(void* payload, size_t size)
-{
-
-}
-static void _aes_ctr_decrypt(void* payload, size_t size)
-{
-
-}
 
 // TODO : 16 Byte Alighment for Payload
 // Key Length : 16, 24, 32 Bytes (Default : 16 Bytes)
@@ -289,10 +442,26 @@ static void _camellia_cbc_encrypt(void* payload, size_t size)
 	Camellia_set_key((const unsigned char*)(&(current_sa->esp_crypto_key[0])), 128, key);
 
 	RAND_bytes((unsigned char*)(&(current_sa->iv)), 8);
+	
+	unsigned char iv[8];
+	memcpy(iv, &(current_sa->iv), 8);
 
 	Camellia_cbc_encrypt((const unsigned char *)payload,
 			(unsigned char *)payload,
-			size, key, (unsigned char *)(&(current_sa->iv)), CAMELLIA_ENCRYPT);
+			size, key, (unsigned char *)iv, CAMELLIA_ENCRYPT);
+
+	ESP* esp = (ESP*)payload;
+	
+	printf("\nEncrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+
 }
 
 static void _camellia_cbc_decrypt(void* payload, size_t size)
@@ -307,6 +476,17 @@ static void _camellia_cbc_decrypt(void* payload, size_t size)
 	Camellia_cbc_encrypt((const unsigned char *)esp->body, 
 			(unsigned char *)esp->body, 
 			size, key, (unsigned char *)(&(esp->iv)), CAMELLIA_DECRYPT);
+
+	printf("\nDecrypted : \n");
+	int i;
+	for(i = 1; i < 65; i++)
+	{
+		printf("%02x ", esp->body[i - 1]);
+		if(i % 16 == 0)
+				printf("\n");
+	}
+	printf("\n");
+
 }
 
 Cryptography cryptographys[] = 

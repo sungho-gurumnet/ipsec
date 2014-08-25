@@ -19,6 +19,11 @@ void setkey_add(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi
 		parameter.auth_key[0] = auth_key[0];
 		parameter.auth_key[1] = auth_key[1];
 		parameter.auth_key[2] = auth_key[2];
+		parameter.auth_key[3] = auth_key[3];
+		parameter.auth_key[4] = auth_key[4];
+		parameter.auth_key[5] = auth_key[5];
+		parameter.auth_key[6] = auth_key[6];
+		parameter.auth_key[7] = auth_key[7];
 	}
 
 	if(setkey_send() < 0)

@@ -1,6 +1,6 @@
 .PHONY: run all depend clean
 #-nostdinc 
-CFLAGS = -I ../../include -I -O2 -Wall -m64 -ffreestanding -std=gnu99 -Werror -D_GW2_ 
+CFLAGS = -I ../../include -I -O2 -Wall -m64 -ffreestanding -std=gnu99 -Werror -D_GW1_ 
 
 DIR = obj 
 

@@ -28,13 +28,22 @@ int setkey_add(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi,
 				sa->esp_auth_key[0] = auth_key[0];
 				sa->esp_auth_key[1] = auth_key[1];
 				sa->esp_auth_key[2] = auth_key[2];
+				sa->esp_auth_key[3] = auth_key[3];
+				sa->esp_auth_key[4] = auth_key[4];
+				sa->esp_auth_key[5] = auth_key[5];
+				sa->esp_auth_key[6] = auth_key[6];
+				sa->esp_auth_key[7] = auth_key[7];
 			}
 		break;
 			
 		case IP_PROTOCOL_AH :
-			sa->ah_key[0] = auth_key[0];
-			sa->ah_key[1] = auth_key[1];
-			sa->ah_key[2] = auth_key[2];
+				sa->ah_key[0] = auth_key[0];
+				sa->ah_key[1] = auth_key[1];
+				sa->ah_key[2] = auth_key[2];
+				sa->ah_key[3] = auth_key[3];
+				sa->ah_key[4] = auth_key[4];
+				sa->ah_key[5] = auth_key[5];
+				sa->ah_key[6] = auth_key[6];
 		break;
 		
 		default : break;
@@ -66,7 +75,16 @@ int setkey_get(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi)
 				{
 					if(dst_ip == tmp->dst_ip)
 					{
-						// ...					
+						printf("SPI : %x\n", tmp->spi);
+						printf("Source IP : %x Destination IP : %x\n", tmp->src_ip, tmp->dst_ip);
+						printf("Source Port : %d Destination Port : %d\n", tmp->src_port, tmp->dst_port);
+						printf("Protocol : %x\n", tmp->protocol);
+						printf("ESP Crypto Algorithm : %x\n", tmp->esp_crypto_algorithm); 
+						printf("ESP Auth Algorithm : %x\n", tmp->esp_auth_algorithm); 
+						printf("Mode ( 1: Transport, 2: Tunnel ) : %d\n", tmp->mode);
+						printf("Crypto Key : 0x%lx%lx%lx\n", tmp->esp_crypto_key[0], tmp->esp_crypto_key[1], tmp->esp_crypto_key[2]);
+						printf("Auth Key : 0x%lx%lx%lx\n", tmp->esp_auth_key[0], tmp->esp_auth_key[1], tmp->esp_auth_key[2]);
+						printf("\n");
 					}
 				}
 			}
@@ -208,13 +226,50 @@ int setkey_spdadd(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t 
 
 int setkey_spdupdate(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t upperspec, uint8_t direction, uint8_t action)
 {
-	// Range ?
+	SP* tmp = NULL;
+
+	list_for_each_entry(tmp, &((spd.sp_list)->list), list)
+	{
+		if((src_ip & src_mask) == (tmp->src_ip & tmp->src_mask))
+		{
+			if((dst_ip & dst_mask) == (tmp->dst_ip & tmp->dst_mask))
+			{
+				if((src_port == tmp->src_port) && (dst_port == tmp->dst_port))
+				{
+					if(upperspec == tmp->upperspec)
+					{
+						tmp->direction = direction;
+						tmp->action = action;
+					}
+				}
+			}
+		}
+	}
+	
 	return 0;
 }
 
 int setkey_spddelete(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t upperspec, uint8_t direction, uint8_t action)
 {
-	// Range ?
+/*
+	SP* tmp = NULL;
+
+	list_for_each_entry(tmp, &((spd.sp_list)->list), list)
+	{
+		if((src_ip & src_mask) == (tmp->src_ip & tmp->src_mask))
+		{
+			if((dst_ip & dst_mask) == (tmp->dst_ip & tmp->dst_mask))
+			{
+				if((src_port == tmp->src_port) && (dst_port == tmp->dst_port))
+				{
+					tmp->upperspec = upperspec;
+					tmp->direction = direction;
+					tmp->action = action;
+				}
+			}
+		}
+	}
+*/	
 	return 0;
 }
 

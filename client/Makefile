@@ -2,7 +2,7 @@ CC = gcc
 OBJS = client.o sender.o setkey.o 
 SRCS = $(OBJS:%.o=%.c)
 #LIBS = -lcrypto 
-CFLAGS = -O2 -Wall -I ../../../../include -std=gnu99 -D_GW2_
+CFLAGS = -O2 -Wall -I ../../../include -std=gnu99 -D_GW1_
 TARGET = client
  
 .SUFFIXES : .c .o

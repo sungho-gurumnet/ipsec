@@ -171,9 +171,9 @@ int encrypt(IP* packet)
 			}
 			else if(current_sa->mode == TUNNEL)
 			{
-				padding_len = (packet->ihl * 4 + ESP_HEADER_LEN + body_len + 2) % 8;
+				padding_len = (packet->ihl * 4 + ESP_HEADER_LEN + body_len + 2) % 16;
 				if(padding_len != 0)
-					padding_len = 8 - (packet->ihl * 4 + ESP_HEADER_LEN + body_len + 2) % 8;
+					padding_len = 16 - (packet->ihl * 4 + ESP_HEADER_LEN + body_len + 2) % 16;
 			}
 
 			padding = packet->body + body_len;

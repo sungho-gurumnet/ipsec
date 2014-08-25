@@ -47,7 +47,7 @@ typedef struct
 	uint8_t crypto_algorithm;
 	uint8_t auth_algorithm;
 	uint64_t crypto_key[3];
-	uint64_t auth_key[3];
+	uint64_t auth_key[8];
 	uint8_t upperspec;
 	uint8_t direction;
 	uint8_t action;
