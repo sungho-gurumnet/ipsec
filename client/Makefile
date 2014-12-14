@@ -1,16 +1,15 @@
 CC = gcc
-OBJS = client.o sender.o setkey.o 
-SRCS = $(OBJS:%.o=%.c)
-#LIBS = -lcrypto 
-CFLAGS = -O2 -Wall -I ../../../include -std=gnu99 -D_GW1_
-TARGET = client
+DIR = obj
+OBJS = obj/client.o obj/sender.o obj/setkey.o 
+CFLAGS = -O0 -Wall -I ../../../include -std=gnu99
  
-.SUFFIXES : .c .o
- 
-all : $(TARGET)
+obj/%.o: src/%.c
+	mkdir -p $(DIR)
+	gcc $(CFLAGS) -c -o $@ $<
 
-$(TARGET) : $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS)
+all : $(OBJS)
+	gcc -e main -o main $^
 
 clean :
-	rm -f $(OBJS) $(TARGET)
+	rm -f main
+	rm -rf $(DIR)

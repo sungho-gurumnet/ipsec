@@ -1,26 +1,25 @@
-#ifndef __SAD_H__
-#define __SAD_H__
+#ifndef __sad_H__
+#define __sad_H__
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
 #include <net/ip.h>
 #include <net/ether.h>
+#include <openssl/des.h>
+#include <util/map.h>
 #include "esp.h"
 #include "sa.h"
-#include "sp.h"
 
-#define true 	1
-#define false 	0
-
-typedef struct
-{
-	SA* sa_list;
-	size_t max_size;
-	size_t size;
+typedef struct {
+	Map* map_spi;
 }SAD;
 
 SAD sad;
 
-SA* getSA(IP* packet);
-SA* findSA(SA* current_sa, SP* current_sp, IP* packet);
+bool sad_init();
+SA* sad_get(uint32_t spi, uint32_t dst_ip, uint8_t protocol);
+bool sad_sa_add(SA* sa);
+void sad_delete(SA* sa);
 #endif

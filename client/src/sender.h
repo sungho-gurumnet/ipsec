@@ -1,8 +1,15 @@
-#ifndef __RECEIVER_H__
-#define __RECEIVER_H__
+#ifndef __SENDER_H__
+#define __SENDER_H__
 
 #include <stdio.h>
-#include "setkey.h"
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define SETKEY_ADD			0x01
 #define SETKEY_GET			0x02
@@ -17,9 +24,11 @@
 #define SETKEY_SPDFLUSH		0x14	
 #define SETKEY_SPDDUMP		0x15
 
-#define SETKEY_PORT_NUM 	1234
+#define IPSEC_ADDR			"192.168.10.254"
+#define IPSEC_PORT	 		1234
 
-typedef struct {
+typedef struct
+{
 	uint8_t name;
 	uint32_t src_ip;
 	uint32_t dst_ip;
@@ -44,8 +53,8 @@ typedef struct {
 	uint8_t level;
 } __attribute__ ((packed)) Parameter;
 
-extern SPD spd;
-extern SAD sad;
+Parameter parameter;
 
-int parse(Parameter* parameter);
-#endif /* __RECEIVER_H_ */
+int setkey_send();
+
+#endif /* __SENDER_H__ */
