@@ -19,13 +19,9 @@
 #define AUTH_AES_XCBC_MAC	0x09
 #define AUTH_TCP_MD5		0x10
 
-typedef struct 
-{
-	void(*authenticate)(void* payload, size_t size, unsigned char* result);
+typedef struct {
+	void(*authenticate)(void* payload, size_t size, unsigned char* result, SA* sa);
 } Authentication;
 
 Authentication* get_authentication(int algorithm);
-
-extern SA* current_sa;
-
 #endif 

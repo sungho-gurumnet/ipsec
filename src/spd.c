@@ -1,88 +1,69 @@
 #include "spd.h"
 
 // KEY : src_ip arrange, dst_ip arrange, xpt_protocol(upperspec), (src_port), (dst_port) TODO : port
-SP* getSP(IP* packet)
-{
-	SP* tmp = NULL;
+bool spd_init() {
+	spd.sp_list = list_create(NULL);
+	if(spd.sp_list == NULL)
+		return false;
+	else
+		return true;
+}
 
-	list_for_each_entry(tmp, &((spd.sp_list)->list), list)
-	{
-//		printf("packet->source : %p, spd->source : %p\n",(endian32(packet->source) & tmp->src_mask), (tmp->src_ip & tmp->src_mask));
-		if((endian32(packet->source) & tmp->src_mask) == (tmp->src_ip & tmp->src_mask))
-		{
-//			printf("packet->destination : %p, spd->destination : %p\n",(endian32(packet->destination) & tmp->dst_mask), (tmp->dst_ip & tmp->dst_mask));
-			if((endian32(packet->destination) & tmp->dst_mask) == (tmp->dst_ip & tmp->dst_mask))
-			{
-//				printf("spd->upperspec : %d, packet->protocol : %d\n", tmp->upperspec, packet->protocol);
-				if(tmp->upperspec == IP_PROTOCOL_ANY)
-					return tmp;
-				else if(packet->protocol == tmp->upperspec)
-					return tmp;
+SP* spd_get(IP* ip) {
+	ListIterator iter;
+	list_iterator_init(&iter, spd.sp_list);
+	
+	SP* tmp = NULL;
+	while((tmp = list_iterator_next(&iter)) != NULL) {
+		if((tmp->protocol == IP_PROTOCOL_ANY) || ip->protocol == tmp->protocol) {
+			if((tmp->src_ip == IP_ANY) || ((endian32(ip->source) & tmp->src_mask) == (tmp->src_ip & tmp->src_mask))) {
+				if((tmp->dst_ip == IP_ANY) || ((endian32(ip->destination) & tmp->dst_mask) == (tmp->dst_ip & tmp->dst_mask))) {
+					switch(ip->protocol) {
+						case IP_PROTOCOL_TCP:;
+							TCP* tcp = (TCP*)ip->body;
+							if((tmp->src_port == PORT_ANY) || (endian16(tcp->source) == tmp->src_port)) {
+								if((tmp->dst_port == PORT_ANY) || (endian16(tcp->destination) == tmp->dst_port)) {
+									return tmp;
+								}
+							}
+							break;
+
+						case IP_PROTOCOL_UDP:;
+							UDP* udp = (UDP*)ip->body;
+							if((tmp->src_port == PORT_ANY) || (endian16(udp->source) == tmp->src_port)) {
+								if((tmp->dst_port == PORT_ANY) || (endian16(udp->destination) == tmp->dst_port)) {
+									return tmp;
+								}
+							}
+							break;
+					}
+				}
 			}
 		}
 	}
-
 	return NULL;
 }
 
-int setSA_pointer(SA* sa)
-{
-	SP* tmp = NULL;
-
-	list_for_each_entry(tmp, &((spd.sp_list)->list), list)
-	{
-		if(tmp->mode == TRANSPORT)
-		{
-			if((sa->src_ip & tmp->src_mask) == (tmp->src_ip & tmp->src_mask))
-			{
-				if((sa->dst_ip & tmp->dst_mask) == (tmp->dst_ip & tmp->dst_mask))
-				{
-					if(sa->protocol == tmp->protocol)
-					{
-						if(tmp->sa_pointer == NULL)
-						{
-							sa->bundle_list = sa;
-
-							INIT_LIST_HEAD(&((sa->bundle_list)->list));
-							tmp->sa_pointer = sa;
-							return 0;
-						}
-						else
-						{
-							list_add_head(&(sa->list), &(tmp->sa_pointer->bundle_list->list));
-							return 0;
-						}
-					}
-				}
-			}
-		}
-		else if(tmp->mode == TUNNEL)
-		{
-			if(sa->src_ip == tmp->t_src_ip)
-			{
-				if(sa->dst_ip == tmp->t_dst_ip)
-				{
-					if(sa->protocol == tmp->protocol)
-					{
-						if(tmp->sa_pointer == NULL)
-						{
-							//sa->bundle_list = sa;
-							//INIT_LIST_HEAD(&((sa->bundle_list)->list));
-							tmp->sa_pointer = sa;
-							return 0;
-						}
-						else
-						{
-							//list_add_head(&(sa->list), &(tmp->sa_pointer->bundle_list->list));
-							return 0;
-						}
-
-					}
-				}
-			}
-		}
-	}
-
-	return -1;		
+bool spd_sp_add(SP* sp, int priority) {
+	return list_add_at(spd.sp_list, priority, sp);
 }
 
+bool spd_sp_delete(int index) {
+	SP* sp = list_remove(spd.sp_list, index);
+	if(sp == NULL)
+		return false;
+	else
+		free(sp);
+
+	return true;
+}
+
+void spd_all_delete(void) {
+	ListIterator iter;
+	list_iterator_init(&iter, spd.sp_list);
+
+	SP* tmp = NULL;
+	while((tmp = list_iterator_remove(&iter)) != NULL) {
+		free(tmp);
+	}
+}

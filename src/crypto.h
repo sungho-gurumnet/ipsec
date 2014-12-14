@@ -24,14 +24,10 @@
 #define CRYPTO_AES_CTR			0x09
 #define CRYPTO_CAMELLIA_CBC		0x10
 
-typedef struct 
-{
-	void(*encrypt)(void* payload, size_t size);
-	void(*decrypt)(void* payload, size_t size);
+typedef struct {
+	void(*encrypt)(void* payload, size_t size, SA* sa);
+	void(*decrypt)(void* payload, size_t size, SA* sa);
 } Cryptography;
 
 Cryptography* get_cryptography(int algorithm);
-
-void _3des_cbc_decrypt(void* payload, size_t size); 
-extern SA* current_sa;
 #endif 
