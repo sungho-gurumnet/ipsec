@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <thread.h>
+#include <readline.h>
 #include <net/ni.h>
 #include <net/packet.h>
 #include <net/ether.h>
@@ -10,6 +11,7 @@
 #include <net/checksum.h>
 #include <net/udp.h>
 #include <net/tcp.h>
+
 #include "ipsec.h"
 
 NetworkInterface* ni_inbound;
@@ -24,14 +26,16 @@ bool ginit(int argc, char** argv) {
 	ni_config_put(ni_outbound, "ip", (void*)(uint64_t)0xc0a8c80a);	// 192.168.200.10
 	ni_config_put(ni_outbound, "netmask", (void*)(uint64_t)0xffffff00);	//24
 
-	if(ipsec_init())
-		return false;
-
-	//set SP & SD
 	return true;
 }
 
 void init(int argc, char** argv) {
+	if(ipsec_init()) {
+		printf("Thread id %d ipsec init error!\n", thread_id());
+	}
+
+
+	receiver_init();
 }
 
 void process_inbound(NetworkInterface* ni) {	// Packets from Internet
@@ -44,9 +48,9 @@ void process_inbound(NetworkInterface* ni) {	// Packets from Internet
 
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 
-	IP* ip = (IP*)ether->payload;
 
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
+		IP* ip = (IP*)ether->payload;
 		if(ipsec_inbound(packet) == 0) {
 			ether->dmac = endian48(arp_get_mac(ni_outbound, endian32(ip->destination)));
 			ether->smac = endian48(ni_outbound->mac);
@@ -69,52 +73,8 @@ void process_outbound(NetworkInterface* ni) {	// Packets from Intranet
 
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 
-
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
 		IP* ip = (IP*)ether->payload;
-		if(ip->protocol == IP_PROTOCOL_UDP) {
-			UDP* udp = (UDP*)ip->body;
-			if(endian16(udp->destination) == SETKEY_PORT_NUM) {
-				/*
-				int orig_len = endian16(ip->length);
-
-				Parameter* parameter = (Parameter*)udp->body;
-
-				int result = parse(parameter);
-
-				memcpy(&(udp->body), &result, sizeof(result));
-
-				for(int i = 0; i < 64 - ETHER_LEN 14 - IP_LEN - UDP_LEN - sizeof(result); i++)
-					udp->body[i + 4] = i;
-
-				uint16_t t = udp->destination;
-				udp->destination = udp->source;
-				udp->source = t;
-				udp->checksum = 0;
-				udp->length = endian16(64 - ETHER_LEN - IP_LEN);
-
-				uint32_t t2 = ip->destination;
-				ip->destination = ip->source;
-				ip->source = t2;
-				ip->ttl = 0x40;
-				ip->length = endian16(64 - ETHER_LEN);
-				ip->checksum = 0;
-				ip->checksum = endian16(checksum(ip, ip->ihl * 4));
-
-				uint64_t t3 = ether->dmac;
-				ether->dmac = ether->smac;
-				ether->smac = t3;
-
-				packet->end += (endian16(ip->length) - orig_len);
-
-				ni_output(ni, packet);
-				packet = NULL;
-
-				return;
-				*/
-			}
-		}
-
 		if(ipsec_outbound(packet) == 0) {
 			ether->dmac = endian48(arp_get_mac(ni_inbound, endian32(ip->destination)));
 			ether->smac = endian48(ni_inbound->mac);
@@ -154,6 +114,13 @@ int main(int argc, char** argv) {
 				process_inbound(ni_inbound);
 			if(ni_has_input(ni_outbound))
 				process_outbound(ni_outbound);
+		}
+
+		char* line = readline();
+		if(line != NULL) {
+			printf("%s\n", line);
+			int result = receiver_parse(line);
+			printf("result : %d\n", result);
 		}
 	}
 

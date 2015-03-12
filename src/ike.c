@@ -5,7 +5,7 @@ bool ike_init() {
 	return false;
 }
 
-SA* ike_sa_get(IP* ip, content* con) {
+SA* ike_sa_get(IP* ip, Content* con) {
 	//Not yet support
 	return NULL;
 }

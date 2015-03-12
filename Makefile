@@ -1,15 +1,15 @@
 .PHONY: run all depend clean
 #-nostdinc 
-CFLAGS = -I ../../include -Wall -m64 -ffreestanding -std=gnu99 -Werror -D_GW1_ 
+CFLAGS = -I ../../include -O2 -Wall -g -m64 -ffreestanding -std=gnu99 -Werror -fno-stack-protector -D_GW1_ 
 
 DIR = obj 
 
-OBJS = obj/sad.o obj/sa.o obj/spd.o obj/sp.o obj/crypto.o obj/auth.o obj/main.o obj/window.o obj/ipsec.o obj/content.o obj/socket.o obj/ike.o
+OBJS = obj/sad.o obj/sa.o obj/spd.o obj/sp.o obj/crypto.o obj/auth.o obj/main.o obj/window.o obj/ipsec.o obj/content.o obj/socket.o obj/ike.o obj/receiver.o
 
 LIBS = --start-group ../../lib/libpacketngin.a ../../lib/libcrypto.a ../../lib/libssl.a --end-group
 
 all: $(OBJS)
-	ld -melf_x86_64 -nostdlib -e main -o main $^ $(LIBS)
+	ld -melf_x86_64 -nostdlib -e main -o main $^ $(LIBS) 
 
 obj/%.o: src/%.c
 	mkdir -p $(DIR)

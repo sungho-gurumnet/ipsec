@@ -10,6 +10,6 @@ typedef struct IKE {
 } IKE;
 
 bool ike_init();
-SA* ike_sa_get(IP* ip, content* con);
+SA* ike_sa_get(IP* ip, Content* con);
 
 #endif

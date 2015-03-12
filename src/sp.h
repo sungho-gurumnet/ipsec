@@ -54,8 +54,9 @@ typedef struct SP{
 }SP;
 
 SP* sp_create(uint8_t direction, uint32_t src_ip, uint32_t src_mask, uint32_t dst_ip, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t action, uint8_t protocol);
-bool sp_content_add(SP* sp, content* content, int priority);
+bool sp_delete(SP* sp);
+bool sp_content_add(SP* sp, Content* content, int priority);
 bool sp_content_delete(SP* sp, int index);
 bool sp_sa_add(SP* sp, SA* sa, uint8_t direction);
-SA* sp_sa_get(SP* sp, content* con, IP* ip, uint8_t direction);
+SA* sp_sa_get(SP* sp, Content* con, IP* ip, uint8_t direction);
 #endif /* __sp_H__ */

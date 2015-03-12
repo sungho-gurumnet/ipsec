@@ -1,5 +1,7 @@
 #include "spd.h"
 
+static SPD spd;
+
 // KEY : src_ip arrange, dst_ip arrange, xpt_protocol(upperspec), (src_port), (dst_port) TODO : port
 bool spd_init() {
 	spd.sp_list = list_create(NULL);
@@ -7,6 +9,10 @@ bool spd_init() {
 		return false;
 	else
 		return true;
+}
+
+SP* spd_get_index(int index) {
+	return list_get(spd.sp_list, index);
 }
 
 SP* spd_get(IP* ip) {
@@ -53,7 +59,7 @@ bool spd_sp_delete(int index) {
 	if(sp == NULL)
 		return false;
 	else
-		free(sp);
+		sp_delete(sp);
 
 	return true;
 }
@@ -64,6 +70,6 @@ void spd_all_delete(void) {
 
 	SP* tmp = NULL;
 	while((tmp = list_iterator_remove(&iter)) != NULL) {
-		free(tmp);
+		sp_delete(tmp);
 	}
 }

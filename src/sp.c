@@ -28,7 +28,17 @@ SP* sp_create(uint8_t direction, uint32_t src_ip, uint32_t src_mask, uint32_t ds
 	return sp;
 }
 
-bool sp_content_add(SP* sp, content* content, int priority) {
+bool sp_delete(SP* sp) {
+	list_destroy(sp->sa_inbound);
+	list_destroy(sp->sa_outbound);
+	list_destroy(sp->contents);
+
+	free(sp);
+
+	return true;
+}
+
+bool sp_content_add(SP* sp, Content* content, int priority) {
 	return list_add_at(sp->contents, priority, content);
 }
 
@@ -36,7 +46,7 @@ bool sp_content_delete(SP* sp, int index) {
 	if(sp == NULL)
 		return false;
 
-	content* content = list_remove(sp->contents, index);
+	Content* content = list_remove(sp->contents, index);
 	if(content == NULL)
 		return false;
 	else
@@ -59,7 +69,7 @@ bool sp_sa_add(SP* sp, SA* sa, uint8_t direction) {
 	return false;
 }
 
-SA* sp_sa_get(SP* sp, content* con, IP* ip, uint8_t direct) {
+SA* sp_sa_get(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 	List* list_sa = NULL;
 	if(direct == IN) {
 		list_sa = sp->sa_inbound;

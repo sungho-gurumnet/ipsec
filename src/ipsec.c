@@ -61,6 +61,7 @@ static int ipsec_decrypt(Packet* packet, SA* sa) {
 	}
 
 	packet->end -= origin_length - endian16(ip->length);
+
 	return 0;
 }
 //check here
@@ -123,6 +124,7 @@ static int ipsec_encrypt(Packet* packet, SA* sa) {
 	}
 
 	packet->end += endian16(ip->length) - origin_length;
+	
 	return 0;
 }
 
@@ -330,8 +332,8 @@ tcp_packet:
 
 	ListIterator iter;
 	list_iterator_init(&iter, sp->contents);
-	content* con;
-	while((con = (content*)list_iterator_next(&iter)) != NULL) {
+	Content* con;
+	while((con = (Content*)list_iterator_next(&iter)) != NULL) {
 		if(sa == NULL) {
 			if((sa = sp_sa_get(sp, con, ip, OUT)) == NULL) {
 				if((sa = ike_sa_get(ip, con)) == NULL) {
@@ -362,5 +364,6 @@ tcp_packet:
 				break;
 		}
 	}
+
 	return 0;
 }

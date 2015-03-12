@@ -1,16 +1,32 @@
+#include <util/list.h>
+#include "sad.h"
+#include "spd.h"
+
 #include "setkey.h"
 
 // TODO : Extensions addition, Duplciation check
 int setkey_add(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi, uint8_t extensions, uint8_t crypto_algorithm, uint8_t auth_algorithm, uint64_t crypto_key[], uint64_t auth_key[]) {
-	if(SA_add(src_ip, dst_ip, protocol, spi, extensions, crypto_algorithm, auth_algorithm, crypto_key[], auth_key[]) == NULL)
-		return -1;
+	SA* sa = sa_create(src_ip, dst_ip, protocol, spi, extensions, crypto_algorithm, auth_algorithm, crypto_key, auth_key);
 
-	return 0;
+	if(sa == NULL) {
+		printf("Can't create the SA\n");
+		return -1;
+	}
+
+	if(sad_sa_add(sa)) {
+		return 0;
+	} else {
+		printf("Can't add the SA to SAD\n");
+		return -2;
+	}
 }
 
 int setkey_get(uint32_t src_ip, uint32_t dst_ip, uint8_t protocol, uint32_t spi) {
  	SA* tmp = 0;
-	while((tmp = list_iter_next(&iter)) != NULL) {
+
+	ListIterator iter;
+	list_iterator_init(&iter, sad);
+	while((tmp = list_iterator_next(&iter)) != NULL) {
 		if(spi == tmp->spi) {
 			if(protocol == tmp->protocol) {
 				if(src_ip == tmp->src_ip) {
@@ -141,11 +157,18 @@ int setkey_dump(uint8_t protocol) {
 
 // TODO : Duplication check
 int setkey_spdadd(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t upperspec, uint8_t direction, uint8_t action, uint8_t protocol, uint8_t mode, uint32_t t_src_ip, uint32_t t_dst_ip, uint8_t level) {
-	SP_add(src_ip, dst_ip, src_mask, dst_mask,. srdc_port, dst_port, upperspec, direction, actionb, protocol, mode, t_src_ip, t_dst_ip, level);
+	//sp_add(src_ip, dst_ip, src_mask, dst_mask,. srdc_port, dst_port, upperspec, direction, action, protocol, mode, t_src_ip, t_dst_ip, level);
+	SP* sp = sp_create(direction, src_ip, src_mask, dst_ip, dst_mask, src_port, dst_port, action, upperspec);
+	if(sp == NULL)
+		return -1;
+	
+	spd_sp_add(sp, 0);
+
 	return 0;
 }
 
 int setkey_spdupdate(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t upperspec, uint8_t direction, uint8_t action) {
+
 	/*
  	SP* tmp = 0;
 	while((tmp = list_iterator_remove(&iter)) != NULL) {
@@ -165,7 +188,7 @@ int setkey_spdupdate(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32
 	return 0;
 }
 
-int setkey_spddelete(uint32_t src_ip, uint32_t dst_ip, uint32_t src_mask, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t upperspec, uint8_t direction, uint8_t action) {
+int setkey_spddelete(int index) {
 	return 0;
 }
 

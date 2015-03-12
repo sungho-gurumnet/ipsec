@@ -15,11 +15,10 @@
 typedef struct {
 	List* sp_list;
 	size_t max_size;
-}SPD;
-
-SPD spd;
+} SPD;
 
 bool spd_init();
+SP* spd_get_index(int index);
 SP* spd_get(IP* ip);
 bool spd_sp_add(SP* sp, int priority);
 bool spd_sp_delete(int index);

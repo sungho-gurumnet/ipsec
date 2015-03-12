@@ -13,11 +13,11 @@
 #include "sad.h"
 #include "crypto.h"
 #include "auth.h"
-#include "receiver.h"
 #include "content.h"
 #include "ah.h"
 #include "socket.h"
 #include "ike.h"
+#include "receiver.h"
 
 int ipsec_inbound(Packet* packet);
 int ipsec_outbound(Packet* packet);

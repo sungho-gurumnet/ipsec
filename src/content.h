@@ -16,7 +16,7 @@ typedef struct content{
 
  	uint8_t crypto_algorithm;
         uint8_t auth_algorithm;
-} content;
+} Content;
 
-content* create_content(uint8_t protocol, uint8_t mode, uint32_t t_src_ip, uint32_t t_dst_ip, uint8_t crypto_algorithm, uint8_t auth_algorithm);
+Content* create_content(uint8_t protocol, uint8_t mode, uint32_t t_src_ip, uint32_t t_dst_ip, uint8_t crypto_algorithm, uint8_t auth_algorithm);
 #endif /*__CONTENT_H__*/
