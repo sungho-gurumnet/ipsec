@@ -14,7 +14,7 @@
 // Action
 #define IPSEC 		0x01
 #define BYPASS 		0x02
-// Upperspec
+// protocol
 #define IP_PROTOCOL_ANY         0x00
 #define ICMP6       0x01
 #define IP4         0x02
@@ -51,7 +51,7 @@ typedef struct SP{
 	List* sa_outbound;
 
 	List* contents;
-}SP;
+} SP;
 
 SP* sp_create(uint8_t direction, uint32_t src_ip, uint32_t src_mask, uint32_t dst_ip, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t action, uint8_t protocol);
 bool sp_delete(SP* sp);

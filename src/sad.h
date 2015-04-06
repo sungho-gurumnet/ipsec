@@ -22,4 +22,5 @@ bool sad_init();
 SA* sad_get(uint32_t spi, uint32_t dst_ip, uint8_t protocol);
 bool sad_sa_add(SA* sa);
 void sad_delete(SA* sa);
+void sad_dump();
 #endif

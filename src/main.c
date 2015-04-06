@@ -23,14 +23,14 @@ bool ginit(int argc, char** argv) {
 	ni_config_put(ni_inbound, "netmask", (void*)(uint64_t)0xffffff00);	//24
 
 	ni_outbound = ni_get(1);
-	ni_config_put(ni_outbound, "ip", (void*)(uint64_t)0xc0a8c80a);	// 192.168.200.10
+	ni_config_put(ni_outbound, "ip", (void*)(uint64_t)0xc0a8640a);	// 192.168.100.10
 	ni_config_put(ni_outbound, "netmask", (void*)(uint64_t)0xffffff00);	//24
 
 	return true;
 }
 
 void init(int argc, char** argv) {
-	if(ipsec_init()) {
+	if(!ipsec_init()) {
 		printf("Thread id %d ipsec init error!\n", thread_id());
 	}
 
@@ -46,9 +46,12 @@ void process_inbound(NetworkInterface* ni) {	// Packets from Internet
 	if(arp_process(packet))
 		return;
 
+	if(icmp_process(packet))
+		return;
+
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 
-
+	//Only Support IPv4
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
 		IP* ip = (IP*)ether->payload;
 		if(ipsec_inbound(packet) == 0) {
@@ -57,6 +60,9 @@ void process_inbound(NetworkInterface* ni) {	// Packets from Internet
 			ni_output(ni_outbound, packet);
 			packet = NULL;
 		}
+	} else {
+		ni_output(ni_outbound, packet);
+		packet = NULL;
 	}
 
 	if(packet)
@@ -71,18 +77,29 @@ void process_outbound(NetworkInterface* ni) {	// Packets from Intranet
 	if(arp_process(packet))
 		return;
 
+	/*TEST
+	if(icmp_process(packet))
+		return;
+	*/
+
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 
+	//Only Support IPv4
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
 		IP* ip = (IP*)ether->payload;
 		if(ipsec_outbound(packet) == 0) {
 			ether->dmac = endian48(arp_get_mac(ni_inbound, endian32(ip->destination)));
 			ether->smac = endian48(ni_inbound->mac);
 
+			printf("here");
 			ni_output(ni_inbound, packet);
+			printf("test");
 			packet = NULL;
 			return;
 		}
+	} else {
+		ni_output(ni_inbound, packet);
+		packet = NULL;
 	}
 
 	if(packet)
@@ -118,9 +135,7 @@ int main(int argc, char** argv) {
 
 		char* line = readline();
 		if(line != NULL) {
-			printf("%s\n", line);
-			int result = receiver_parse(line);
-			printf("result : %d\n", result);
+			receiver_parse(line);
 		}
 	}
 

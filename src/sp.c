@@ -54,6 +54,7 @@ bool sp_content_delete(SP* sp, int index) {
 
 	return true;
 }
+
 bool sp_sa_add(SP* sp, SA* sa, uint8_t direction) {
 	if(sp == NULL)
 		return false;
@@ -80,10 +81,15 @@ SA* sp_sa_get(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 	ListIterator iter;
 	list_iterator_init(&iter, list_sa);
 	SA* sa = NULL;
+	printf("HERE\n");
 	while((sa = list_iterator_next(&iter)) != NULL) {
-		if((sp->protocol_share == true) || (ip->protocol == sa->protocol)) {
+	printf("HERE\n");
+		if((sp->protocol_share == true) || (cont->protocol == sa->protocol)) {
+	printf("HERE\n");
 			if((sp->src_ip_share == true) || endian32(ip->source) == sa->src_ip) {
+	printf("HERE\n");
 				if((sp->dst_ip_share == true) || endian32(ip->destination) == sa->dst_ip) {
+	printf("HERE\n");
 					switch(ip->protocol) {
 						case IP_PROTOCOL_TCP:;
 							TCP* tcp = (TCP*)ip->body;
@@ -102,6 +108,9 @@ SA* sp_sa_get(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 								}
 							}
 							break;
+
+						default:
+							return sa;
 					}
 				}
 				

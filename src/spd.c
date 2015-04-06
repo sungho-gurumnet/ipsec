@@ -42,6 +42,8 @@ SP* spd_get(IP* ip) {
 								}
 							}
 							break;
+						default:
+							return tmp;
 					}
 				}
 			}

@@ -1,4 +1,5 @@
 #include "sad.h"
+#include "content.h"
 
 // KEY : Packet's dst_ip, ipsec_protocol, spi   
 bool sad_init() {
@@ -61,4 +62,52 @@ void sad_delete(SA* sa) {
 			map_destroy(map_dst_ip);
 		}
 	}
+}
+
+void sad_dump() {
+	MapEntry* entry;
+	int index = 0;
+
+	MapIterator iter_spi;
+	map_iterator_init(&iter_spi, sad.map_spi);
+	while(map_iterator_has_next(&iter_spi)) {
+		entry = map_iterator_next(&iter_spi);
+		MapIterator iter_dst_ip;
+		map_iterator_init(&iter_dst_ip, entry->data);
+
+		while(map_iterator_has_next(&iter_dst_ip)) {
+			entry = map_iterator_next(&iter_dst_ip);
+			MapIterator iter_sad;
+			map_iterator_init(&iter_sad, entry->data);
+
+			while(map_iterator_has_next(&iter_sad)) {
+				MapEntry* entry = map_iterator_next(&iter_sad);
+				SA* sa = entry->data;
+
+				void protocol_dump(uint8_t protocol) {
+					switch(protocol) {
+						case IP_PROTOCOL_ESP:
+							printf("ESP");
+							break;
+						case IP_PROTOCOL_AH:
+							printf("AH");
+							break;
+					}
+				}
+
+				printf("INDEX[ %d] ", index++);
+				printf("Protocol ");
+				protocol_dump(sa->protocol);
+				printf("\n");
+				printf("Source ip %x mask %x port %d\n", sa->src_ip, sa->src_mask, sa->src_port);
+				printf("Destination ip %x mask %x port %d\n", sa->dst_ip, sa->dst_mask, sa->dst_port);
+				for(int i = 0; i < 3; i++)
+					printf("%d %0x\n", i, sa->esp_crypto_key[i]);
+				for(int i = 0; i < 8; i++)
+					printf("%d %0x\n", i, sa->esp_auth_key[i]);
+				
+			}
+		}
+	}
+
 }
