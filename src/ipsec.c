@@ -353,13 +353,15 @@ int ipsec_outbound(Packet* packet) {
 		// 2. SAD Lookup
 		switch(con->protocol) {
 			case IP_PROTOCOL_ESP:
+				printf("esp bef size: %d\n", endian16(ip->length));
 				ipsec_encrypt(packet, sa);
-				printf("esp finish\n");
+				printf("esp after size: %d\n", endian16(ip->length));
 				break;
 
 			case IP_PROTOCOL_AH:
+				printf("ah bef size: %d\n", endian16(ip->length));
 				ipsec_auth(packet, sa);
-				printf("ah finish\n");
+				printf("ah after size: %d\n", endian16(ip->length));
 				break;
 		}
 		sa = NULL;
