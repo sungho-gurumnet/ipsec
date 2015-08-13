@@ -1,113 +1,184 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <net/ni.h>
+#include <net/ip.h>
+#include <net/ether.h>
+#include <openssl/des.h>
+#include <util/map.h>
+
 #include "sad.h"
-#include "content.h"
+#include "sa.h"
 
-// KEY : Packet's dst_ip, ipsec_protocol, spi   
-bool sad_init() {
-	sad.map_spi = map_create(4096, NULL, NULL, NULL);
-	if(sad.map_spi == NULL)
-		return false;
-	else
-		return true;
-}
-
-SA* sad_get(uint32_t spi, uint32_t dst_ip, uint8_t protocol) {
-	Map* map_dst_ip = map_get(sad.map_spi, (void*)(uint64_t)endian32(spi));
-	if(map_dst_ip == NULL)
-		return NULL;
-
-	Map* map_sad = map_get(map_dst_ip, (void*)(uint64_t)endian32(dst_ip));
-	if(map_sad == NULL)
-		return NULL;
-
-	return map_get(map_sad, (void*)(uint64_t)protocol);
-}
-
-bool sad_sa_add(SA* sa) {
-	Map* map_dst_ip = map_get(sad.map_spi, (void*)(uint64_t)sa->spi);
-	if(map_dst_ip == NULL) {
-		map_dst_ip = map_create(4096, NULL, NULL, NULL);
-		map_put(sad.map_spi, (void*)(uint64_t)sa->spi, (void*)(uint64_t)map_dst_ip);
-	}
-	Map* map_sad = map_get(map_dst_ip, (void*)(uint64_t)sa->dst_ip);
-	if(map_sad == NULL) {
-		map_sad = map_create(4096, NULL, NULL, NULL);
-		map_put(map_dst_ip, (void*)(uint64_t)sa->dst_ip, (void*)(uint64_t)map_sad);
-	}
-
-	return map_put(map_sad, (void*)(uint64_t)sa->protocol, (void*)(uint64_t)sa);
-}
-
-void sad_delete(SA* sa) {
-	Map* map_dst_ip = map_get(sad.map_spi, (void*)(uint64_t)endian32(sa->spi));
-
-	Map* map_sad = NULL;
-	if(map_dst_ip != NULL)
-		map_sad = map_get(map_dst_ip, (void*)(uint64_t)endian32(sa->dst_ip)); 
-	else
+// KEY : Packet's dest_ip, ipsec_protocol, spi   
+void sad_remove_all(NetworkInterface* ni) {
+	Map* sad = ni_config_get(ni, SAD);
+	if(!sad)
 		return;
 
-	if(map_sad != NULL)
-		sa = (SA*)map_remove(map_sad, (void*)(uint64_t)sa->protocol);
-	else
-		return;
+	MapIterator iter;
+	map_iterator_init(&iter, sad);
+	while(map_iterator_has_next(&iter)) {
+		MapEntry* entry = map_iterator_next(&iter);
+		Map* protocol_map = entry->data;
 
-	if(sa != NULL)
-		free(sa);
-
-	if(map_is_empty(map_sad)) {
-		map_remove(map_dst_ip, (void*)(uint64_t)endian32(sa->dst_ip));
-		map_destroy(map_sad);
-		if(map_is_empty(map_dst_ip)) {
-			map_remove(sad.map_spi, (void*)(uint64_t)endian32(sa->spi));
-			map_destroy(map_dst_ip);
+		MapIterator _iter;
+		map_iterator_init(&_iter, protocol_map);
+		while(map_iterator_has_next(&_iter)) {
+			MapEntry* _entry = map_iterator_next(&_iter);
+			SA* sa = _entry->data;
+			sa_free(sa);
+			map_iterator_remove(&_iter);
 		}
+		map_destroy(protocol_map);
+		map_iterator_remove(&iter);
 	}
+	map_destroy(sad);
 }
 
-void sad_dump() {
-	MapEntry* entry;
-	int index = 0;
+SA* sad_get_sa(NetworkInterface* ni, uint32_t spi, uint32_t dest_ip, uint8_t protocol) {
+	Map* sad = ni_config_get(ni, SAD);
+	if(!sad) {
+		printf("Can'nt found SA\n");
+		return NULL;
+	}
 
-	MapIterator iter_spi;
-	map_iterator_init(&iter_spi, sad.map_spi);
-	while(map_iterator_has_next(&iter_spi)) {
-		entry = map_iterator_next(&iter_spi);
-		MapIterator iter_dst_ip;
-		map_iterator_init(&iter_dst_ip, entry->data);
+	uint64_t key = ((uint64_t)endian32(spi) << 32) | (uint64_t)dest_ip;
+	Map* protocol_map = map_get(sad, (void*)key);
+	if(protocol_map == NULL) {
+		printf("Can'nt found SA\n");
+		return NULL;
+	}
 
-		while(map_iterator_has_next(&iter_dst_ip)) {
-			entry = map_iterator_next(&iter_dst_ip);
-			MapIterator iter_sad;
-			map_iterator_init(&iter_sad, entry->data);
+	SA* sa = map_get(protocol_map, (void*)(uint64_t)protocol);
+	if(!sa) {
+		printf("Can'nt found SA\n");
+		return NULL;
+	}
 
-			while(map_iterator_has_next(&iter_sad)) {
-				MapEntry* entry = map_iterator_next(&iter_sad);
-				SA* sa = entry->data;
+	return sa;
+}
 
-				void protocol_dump(uint8_t protocol) {
-					switch(protocol) {
-						case IP_PROTOCOL_ESP:
-							printf("ESP");
-							break;
-						case IP_PROTOCOL_AH:
-							printf("AH");
-							break;
-					}
-				}
-
-				printf("INDEX[ %d] ", index++);
-				printf("Protocol ");
-				protocol_dump(sa->protocol);
-				printf("\n");
-				printf("Source ip %x mask %x port %d\n", sa->src_ip, sa->src_mask, sa->src_port);
-				printf("Destination ip %x mask %x port %d\n", sa->dst_ip, sa->dst_mask, sa->dst_port);
-				for(int i = 0; i < 3; i++)
-					printf("%d %0x\n", i, sa->esp_crypto_key[i]);
-				for(int i = 0; i < 8; i++)
-					printf("%d %0x\n", i, sa->esp_auth_key[i]);
-				
-			}
+bool sad_add_sa(NetworkInterface* ni, SA* sa) {
+	Map* sad = ni_config_get(ni, SAD);
+	if(!sad) {
+		sad = map_create(16, NULL, NULL, ni->pool);
+		if(!sad) {
+			printf("Can'nt create SAD\n");
+			goto sad_create_fail;
+		}
+		if(!ni_config_put(ni, SAD, sad)) {
+			printf("Can'nt add SAD\n");
+			goto sad_put_fail;
 		}
 	}
 
+	uint64_t key = ((uint64_t)endian32(sa->spi) << 32) | (uint64_t)sa->dest_ip; /* SPI(32) + Destination Address(32)*/
+
+	Map* protocol_map = map_get(sad, (void*)key);
+	if(!protocol_map) {
+		protocol_map = map_create(8, NULL, NULL, ni->pool);
+		if(!protocol_map) {
+			printf("Can'nt create map\n");
+			goto protocol_map_create_fail;
+		}
+		if(!map_put(sad, (void*)key, protocol_map)) {
+			printf("Can'nt put map\n");
+			goto protocol_map_put_fail;
+		}
+	}
+
+	if(!map_put(protocol_map, (void*)(uint64_t)sa->protocol, (void*)(uint64_t)sa))
+		goto sa_put_fail;
+
+	return true;
+
+sa_put_fail:
+protocol_map_put_fail:
+	if(map_is_empty(protocol_map)) {
+		map_destroy(protocol_map);
+		map_remove(sad, (void*)key);
+	}
+protocol_map_create_fail:
+sad_put_fail:
+	if(map_is_empty(sad)) {
+		map_destroy(sad);
+		ni_config_remove(ni, SAD);
+	}
+
+sad_create_fail:
+	return false;
+}
+
+SA* sad_remove_sa(NetworkInterface* ni, uint32_t spi, uint32_t dest_ip, uint8_t protocol) {
+	Map* sad = ni_config_get(ni, SAD);
+	if(!sad) {
+		printf("Can'nt found SA\n");
+		return NULL;
+	}
+
+	uint64_t key = ((uint64_t)spi << 32) | (uint64_t)dest_ip;
+
+	Map* protocol_map = map_get(sad, (void*)(uint64_t)key);
+	if(!protocol_map) { 
+		printf("Can'nt found SA\n");
+		return NULL;
+	}
+
+	SA* sa = (SA*)map_remove(protocol_map, (void*)(uint64_t)protocol);
+	if(!sa) { 
+		printf("Can'nt found SA\n");
+		return NULL;
+	}
+
+	if(map_is_empty(protocol_map)) {
+		map_destroy(protocol_map);
+		map_remove(sad, (void*)key);
+	}
+
+	return sa;
+}
+
+void sad_dump(NetworkInterface* ni) {
+ //	Map* sad = ni_config_get(ni, SAD);
+ //	if(!sad)
+ //		return;
+ //
+ //	int index = 0;
+ //	MapIterator iter;
+ //	map_iterator_init(&iter, sad);
+ //	while(map_iterator_has_next(&iter)) {
+ //		MapEntry* entry = map_iterator_next(&iter);
+ //
+ //		MapIterator _iter;
+ //		map_iterator_init(&_iter, entry->data);
+ //		while(map_iterator_has_next(&_iter)) {
+ //			MapEntry* _entry = map_iterator_next(&_iter);
+ //			SA* sa = _entry->data;
+ //
+ //			void protocol_dump(uint8_t protocol) {
+ //				switch(protocol) {
+ //					case IP_PROTOCOL_ESP:
+ //						printf("ESP");
+ //						break;
+ //					case IP_PROTOCOL_AH:
+ //						printf("AH");
+ //						break;
+ //				}
+ //			}
+ //
+ //			printf("INDEX[%d] ", index++);
+ //			printf("Protocol ");
+ //			protocol_dump(sa->protocol);
+ //			printf("\n");
+ //			printf("Source ip %x mask %x port %d\n", sa->src_ip, sa->src_port);
+ //			printf("Destination ip %x mask %x port %d\n", sa->dest_ip, sa->dest_port);
+ //			for(int i = 0; i < 3; i++)
+ //				printf("%d %0x\n", i, sa->esp_crypto_key[i]);
+ //			for(int i = 0; i < 8; i++)
+ //				printf("%d %0x\n", i, sa->esp_auth_key[i]);
+ //			
+ //		}
+ //	}
 }

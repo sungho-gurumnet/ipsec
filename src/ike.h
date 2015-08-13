@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include "content.h"
 
-typedef struct IKE {
+typedef struct _IKE {
 	uint32_t ip;
 	uint16_t port;
 } IKE;

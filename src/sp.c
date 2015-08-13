@@ -1,100 +1,167 @@
 #include "sp.h"
 
-SP* sp_create(uint8_t direction, uint32_t src_ip, uint32_t src_mask, uint32_t dst_ip, uint32_t dst_mask, uint16_t src_port, uint16_t dst_port, uint8_t action, uint8_t protocol) {
-	SP* sp = (SP*)malloc(sizeof(SP));
-	if(sp == NULL)
+SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
+        SP* sp = (SP*)__malloc(sizeof(SP), ni->pool);
+	if(sp == NULL) {
+		printf("Can'nt allocate SP\n");
 		return NULL;
+	}
+	memset(sp, 0, sizeof(SP));
 
-	sp->direction = direction;
-	sp->src_ip = src_ip;
-	sp->src_mask = src_mask;
-	sp->dst_ip = dst_ip;
-	sp->dst_mask = dst_mask;
-	sp->src_port = src_port;
-	sp->dst_port = dst_port;
-	sp->action = action;
-	sp->protocol = protocol;
-
-	sp->sa_inbound = list_create(NULL);
-	sp->sa_outbound = list_create(NULL);
-	sp->contents = list_create(NULL);
-
-	sp->src_ip_share = true;
-	sp->dst_ip_share = true;
-	sp->src_port_share = true;
-	sp->dst_port_share = true;
-	sp->protocol_share = true;
+	for(int i = 0; attrs[i * 2] != SP_NONE; i++) {
+		switch(attrs[i * 2]) {
+			case SP_DIRECTION:
+				sp->direction = attrs[i * 2 + 1];
+				break;
+			case SP_PROTOCOL:
+				sp->protocol = attrs[i * 2 + 1];
+				break;
+			case SP_IS_PROTOCOL_SA_SHARE:
+				sp->is_protocol_share = attrs[i * 2 + 1];
+				break;
+			case SP_SOURCE_IP_ADDR:
+				sp->src_ip = attrs[i * 2 + 1];
+				break;
+			case SP_SOURCE_NET_MASK:
+				sp->src_mask = attrs[i * 2 + 1];
+				break;
+			case SP_IS_SOURCE_IP_SA_SHARE:
+				sp->is_src_ip_sa_share = attrs[i * 2 + 1];
+				break;
+			case SP_SOURCE_PORT:
+				sp->src_port = attrs[i * 2 + 1];
+				break;
+			case SP_IS_SOURCE_PORT_SA_SHARE:
+				sp->is_src_port_sa_share = attrs[i * 2 + 1];
+				break;
+			case SP_OUT_NI:
+				sp->out_ni = attrs[i * 2 + 1];
+				break;
+			case SP_DESTINATION_IP_ADDR:
+				sp->dest_ip = attrs[i * 2 + 1];
+				break;
+			case SP_DESTINATION_NET_MASK:
+				sp->dest_mask = attrs[i * 2 + 1];
+				break;
+			case SP_IS_DESTINATION_IP_ADDR:
+				sp->is_dest_ip_sa_share = attr[i * 2 + 1];
+				break;
+			case SP_DESTINATION_PORT:
+				sp->dest_port = attrs[i * 2 + 1];
+				break;
+			case SP_DESTINATION_PORT_SHARE:
+				sp->is_dest_port_sa_share = attrs[i * 2 + 1];
+				break;
+			case SP_ACTION:
+				sp->action = attrs[i * 2 + 1];
+				break;
+		}
+	}
 
 	return sp;
 }
 
-bool sp_delete(SP* sp) {
-	list_destroy(sp->sa_inbound);
-	list_destroy(sp->sa_outbound);
-	list_destroy(sp->contents);
+bool sp_free(NetworkInterface* ni, SP* sp) {
+	if(sp->sa_inbound)
+		list_destroy(sp->sa_inbound);
+	if(sp->sa_outbound)
+		list_destroy(sp->sa_outbound);
+	if(sp->contents)
+		list_destroy(sp->contents);
 
-	free(sp);
+	__free(sp, ni->pool);
 
 	return true;
 }
 
-bool sp_content_add(SP* sp, Content* content, int priority) {
-	return list_add_at(sp->contents, priority, content);
+bool sp_add_content(SP* sp, Content* content, int priority) {
+	if(!sp->contents) {
+		sp->contents = list_create(ni->pool);
+		if(!sp->contents) {
+			printf("Can'nt allocate contents list\n");
+			return false;
+		}
+	}
+	if(!list_add_at(sp->contents, priority, content)) {
+		if(list_is_empty(sp->contents)) {
+			list_destroy(sp->contents);
+			sp->contents = NULL;
+		}
+
+		return false;
+	}
+
+	return true;
 }
 
-bool sp_content_delete(SP* sp, int index) {
-	if(sp == NULL)
-		return false;
+Content* sp_get_content(SP* sp, int index) {
+	if(!sp->contents)
+		return NULL;
+
+	Content* content = list_get(sp->contetns, index);
+
+	return content;
+}
+
+Content* sp_remove_content(SP* sp, int index) {
+	if(!sp->contents)
+		return NULL;
 
 	Content* content = list_remove(sp->contents, index);
-	if(content == NULL)
-		return false;
-	else
-		free(content);
+	if(!content)
+		return NULL;
 
-	return true;
+	if(list_is_empty(sp->contents)) {
+		list_destroy(sp->contents);
+		sp->contents = NULL;
+	}
+
+	return content;
 }
 
-bool sp_sa_add(SP* sp, SA* sa, uint8_t direction) {
-	if(sp == NULL)
-		return false;
-	if(sa == NULL)
-		return false;
-
-        if(direction == IN) {
-		return list_add(sp->sa_inbound, sa);
-        } else if(direction == OUT) {
-		return list_add(sp->sa_outbound, sa);
-        }
+bool sp_add_sa(SP* sp, SA* sa, uint8_t direction) {
+	switch(direction) {
+		case IN:
+			return list_add(sp->sa_inbound, sa);
+		case OUT:
+			return list_add(sp->sa_outbound, sa);
+		case INOUT:
+			//TODO
+			break;
+	}
 
 	return false;
 }
 
-SA* sp_sa_get(SP* sp, Content* cont, IP* ip, uint8_t direct) {
-	List* list_sa = NULL;
-	if(direct == IN) {
-		list_sa = sp->sa_inbound;
-	} else if(direct == OUT) {
-		list_sa = sp->sa_outbound;
-	}
+bool sp_remove_sa(SP* sp, SA* sa) {
+	//TODO
+}
 
+//TODO
+SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 	ListIterator iter;
-	list_iterator_init(&iter, list_sa);
-	SA* sa = NULL;
-	printf("HERE\n");
-	while((sa = list_iterator_next(&iter)) != NULL) {
-	printf("HERE\n");
-		if((sp->protocol_share == true) || (cont->protocol == sa->protocol)) {
-	printf("HERE\n");
-			if((sp->src_ip_share == true) || endian32(ip->source) == sa->src_ip) {
-	printf("HERE\n");
-				if((sp->dst_ip_share == true) || endian32(ip->destination) == sa->dst_ip) {
-	printf("HERE\n");
+
+	if(direct == IN) {
+		if(!sp->sa_inbound)
+			return NULL;
+		list_iterator_init(&iter, sp->sa_inbound);
+	} else if(direct == OUT) {
+		if(!sp->sa_outbound)
+			return NULL;
+		list_iterator_init(&iter, sp->sa_outbound);
+	} else
+		return NULL;
+
+	while(list_iterator_has_next(&iter)) {
+		SA* sa = list_iterator_next(&iter);
+		if(sp->is_protocol_share || (sp->protocol == sa->protocol)) {
+			if(sp->src_ip_share || endian32(ip->source) == sa->src_ip) {
+				if(sp->dest_ip_share || endian32(ip->destination) == sa->dest_ip) {
 					switch(ip->protocol) {
 						case IP_PROTOCOL_TCP:;
 							TCP* tcp = (TCP*)ip->body;
 							if((sp->src_port_share == true) || (endian16(tcp->source) == sa->src_port)) {
-								if((sp->dst_port_share == true) || (endian16(tcp->destination) == sa->dst_port)) {
+								if((sp->dest_port_share == true) || (endian16(tcp->destination) == sa->dest_port)) {
 									return sa;
 								}
 							}
@@ -103,7 +170,7 @@ SA* sp_sa_get(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 						case IP_PROTOCOL_UDP:;
 							UDP* udp = (UDP*)ip->body;
 							if((sp->src_port_share == true) || (endian16(udp->source) == sa->src_port)) {
-								if((sp->dst_port_share == true) || (endian16(udp->destination) == sa->dst_port)) {
+								if((sp->dest_port_share == true) || (endian16(udp->destination) == sa->dest_port)) {
 									return sa;
 								}
 							}

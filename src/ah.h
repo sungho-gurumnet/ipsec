@@ -3,7 +3,7 @@
 
 #define AH_HEADER_LEN 	12
 
-typedef struct {
+typedef struct _AH{
 	uint8_t		next_hdr;
 	uint8_t		len;
 	uint16_t 	reserved;
@@ -11,7 +11,7 @@ typedef struct {
 	uint32_t 	seq_num;
 	uint8_t		auth_data[12];
 
-	uint8_t		payload[0];
+	uint8_t		body[0];
 } __attribute__ ((packed)) AH;
 
 #endif 

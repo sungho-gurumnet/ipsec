@@ -1,22 +1,21 @@
 #ifndef __SOCKET_H__
 #define __SOCKET_H__
-#include <util/map.h>
-#include <malloc.h>
+#include <netj/ni.h>
 #include "sp.h"
 #include "sa.h"
 
-Map* map_socket;
+#define	SOCKETS	"net.ipsec.sockets"
 
-typedef struct socket{
+typedef struct _Socket{
 	SP* sp;
 	SA* sa;
-}socket;
+} Socket;
 
-bool socket_init();
-socket* socket_create(SP* sp, SA* sa);
-bool socket_add(uint32_t ip, uint16_t port, socket* data);
-socket* socket_get(uint32_t src_ip, uint16_t src_port);
-bool socket_delete(uint32_t ip, uint16_t port);
-bool socket_exist(uint32_t ip, uint16_t port);
+
+Socket* socket_create(NetworkInterface* ni, SP* sp, SA* sa);
+void socket_delete(NetworkInterface* ni, Socket* socket);
+bool socket_add(NetworkInterface* ni, uint32_t ip, uint16_t port, Socket* socket);
+bool socket_remove(NetworkInterface* ni, uint32_t ip, uint16_t port);
+Socket* socket_get(NetworkInterface* ni, uint32_t ip, uint16_t port);
 
 #endif /*__SOCKET_H__*/

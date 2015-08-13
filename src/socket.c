@@ -1,52 +1,78 @@
+#include <netj/ni.h>
+#include <util/map.h>
+#include <malloc.h>
+#define DONT_MAKE_WRAPPER
+#include <_malloc.h>
+#undef DONT_MAKE_WRAPPER
+
+#include "sp.h"
+#include "sa.h"
 #include "socket.h"
 
-bool socket_init() {
-	map_socket = map_create(4096, NULL, NULL, NULL);
-	if(map_socket == NULL)
-		return false;
-	return true;
-}
+Socket* socket_create(NetworkInterface* ni, SP* sp, SA* sa) {
+	Socket* socket = __malloc(sizeof(socket), ni->pool);
+	if(!socket)
+		return NULL;
 
-socket* socket_create(SP* sp, SA* sa) {
-
-	socket* socket = malloc(sizeof(socket));
 	socket->sp = sp;
 	socket->sa = sa;
 
 	return socket;
 }
 
-bool socket_add(uint32_t ip, uint16_t port, socket* socket) {
-	uint64_t key = ip;
-	key <<= 32;
-	key += port;
-
-	return map_put(map_socket, (void*)key, socket);
+void socket_delete(NetworkInterface* ni, Socket* socket) {
+	__free(socket, ni->pool);
 }
 
-socket* socket_get(uint32_t ip, uint16_t port) {
-	uint64_t key = ip;
-	key <<= 32;
-	key += port;
+bool socket_add(NetworkInterface* ni, uint32_t ip, uint16_t port, Socket* socket) {
+	Map* sockets = ni_config_get(ni, SOCKETS);
+	if(!sockets) {
+		sockets = map_create(16, NULL, NULL, ni->pool);
+		if(!sockets) {
+			printf("Can'nt create socket table\n");
+			return false;
+		}
 
-	return (socket*)map_get(map_socket, (void*)key);
-}
+		if(!ni_config_put(ni, SOCKETS, sockets)) {
+			map_destroy(sockets);
+			return false;
+		}
+	}
 
-bool socket_delete(uint32_t ip, uint16_t port) {
-	uint64_t key = ip;
-	key <<= 32;
-	key += port;
-	socket* socket = map_remove(map_socket, (void*)key);
-	if(socket != NULL) {
-		free(socket);
-		return true;
-	} else
+	uint64_t key = (uint64_t)ip << 32 | (uint64_t)port;
+	if(!map_put(sockets, (void*)key, socket)) {
+		if(map_is_empty(sockets)) {
+			map_destroy(sockets);
+			ni_config_remove(ni, SOCKETS);
+		}
 		return false;
+	}
+
+	return true;
 }
 
-bool socket_exist(uint32_t ip, uint16_t port) {
-	uint64_t key = ip;
-	key <<= 32;
-	key += port;
-	return map_contains(map_socket, (void*)key);
+bool socket_remove(NetworkInterface* ni, uint32_t ip, uint16_t port) {
+	Map* sockets = ni_config_get(ni, SOCKETS);
+	if(!sockets)
+		return false;
+
+	uint64_t key = (uint64_t)ip << 32 | (uint64_t)port;
+	Socket* socket = map_remove(sockets, (void*)key);
+	if(!socket)
+		return false;
+
+	socket_delete(ni, socket);
+
+	if(map_is_empty(sockets)) {
+		map_destroy(sockets);
+		ni_config_remove(ni, SOCKETS);
+	}
+
+	return true;
+}
+
+Socket* socket_get(NetworkInterface* ni, uint32_t ip, uint16_t port) {
+	uint64_t key = (uint64_t)ip << 32 | (uint64_t)port;
+
+	return map_get(sockets, (void*)key);
 }

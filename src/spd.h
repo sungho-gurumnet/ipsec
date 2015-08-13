@@ -1,26 +1,15 @@
 #ifndef __spd_H__
 #define __spd_H__
 
-#include <stdio.h>
-#include <stdint.h>
 #include <stdbool.h>
-#include <net/ether.h>
-#include <net/ip.h>
-#include <net/tcp.h>
-#include <net/udp.h>
-#include "sa.h"
+#include <net/ni.h>
 #include "sp.h"
-#include "content.h"
+//#include "content.h"
 
-typedef struct {
-	List* sp_list;
-	size_t max_size;
-} SPD;
+#define SPD "net.ipsec.spd"
 
-bool spd_init();
-SP* spd_get_index(int index);
-SP* spd_get(IP* ip);
-bool spd_sp_add(SP* sp, int priority);
-bool spd_sp_delete(int index);
-void spd_all_delete(void);
+SP* spd_get(NetworkInterface* ni, IP* ip);
+bool spd_add_sp(NetworkInterface* ni, SP* sp, int priority);
+bool spd_delete_sp(NetworkInterface* ni, int index);
+void spd_delete_all(NetworkInterface* ni);
 #endif

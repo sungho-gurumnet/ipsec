@@ -7,7 +7,7 @@
 
 #define ReplayWindowSize 32
 
-typedef struct {
+typedef struct _Window {
 	uint32_t bitmap;
 	uint32_t lastSeq;
 	uint8_t seq_counter;

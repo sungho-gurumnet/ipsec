@@ -1,6 +1,6 @@
 #include "content.h"
 
-Content* create_content(uint8_t protocol, uint8_t mode, uint32_t t_src_ip, uint32_t t_dst_ip, uint8_t crypto_algorithm, uint8_t auth_algorithm) {
+Content* content_alloc(uint8_t protocol, uint8_t mode, uint32_t t_src_ip, uint32_t t_dst_ip, uint8_t crypto_algorithm, uint8_t auth_algorithm) {
 	Content* cont = (Content*)malloc(sizeof(Content));
 	if(cont== NULL)
 		return NULL;
@@ -16,4 +16,8 @@ Content* create_content(uint8_t protocol, uint8_t mode, uint32_t t_src_ip, uint3
 	cont->auth_algorithm = auth_algorithm;
 
 	return cont;
+}
+
+void content_free(Content* content) {
+	free(content);
 }
