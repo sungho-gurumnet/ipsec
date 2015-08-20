@@ -8,69 +8,73 @@
 
 ###COMMANDS
 
-		spd Security policy databse entry
-			add -- Add security policy database entry
-			remove -- Remove security policy database entry
-			list -- List of security policy database entry
+	spd Security policy databse entry
+		add -- Add security policy database entry
+		remove -- Remove security policy database entry
+		list -- List of security policy database entry
 
-		content Security policy database entry's content
-			add -- Add security policy databse entry content
-			remove -- Remove security policy databse entry content
-			list -- List security policy databse entry content
+	content Security policy database entry's content
+		add -- Add security policy databse entry content
+		remove -- Remove security policy databse entry content
+		list -- List security policy databse entry content
 
-		sa Security association
-			add -- Add security association entry
-			remove -- Remove security association entry
-			list --List security association entry
-	
+	sa Security association
+		add -- Add security association entry
+		remove -- Remove security association entry
+		list --List security association entry
+
 ###PARAMETERS
-		-i interface number
 
-		-s address[/mask][:port]
-			Source specification.
+	*-i* interface number
 
-		-d address[/mask][:port]
-			Destination specificiation.
+	-s address[/mask][:port]
+		Source specification. defalut = any.
 
-		-p Protocols
-			any -- TCP & UDP
-			tcp -- TCP
-			udp -- UDP
+	-d address[/mask][:port]
+		Destination specificiation. defalut = any.
 
-		-p Priority
-			Priority of entry.
+	-p Protocols
+		any -- TCP & UDP
+		tcp -- TCP
+		udp -- UDP
 
-		-a Actions
-			ipsec -- IPSec
-			bypass -- Bypass
+	-p Priority
+		Priority of entry.
 
-		-k Key
+	-a Actions
+		ipsec -- IPSec
+		bypass -- Bypass
 
-		-A Authentication Method
-			hmac_md5
-			hmac_sha1
-			keyed_md5
-			keyed_sha1
-			hmac_sha256
-			hmac_sha384
-			hmac_sha512
-			hmac_sha384
-			aes_xcbc_mac
-			tcp_md5
+	-k Key
 
-		-E Encapsulating Security Payload Method
-			des_cbc
-			3des_cbc
-			blowfish_cbc
-			cast128_cbc
-			des_deriv
-			3des_deriv
-			rijndael_cbc
-			twofish_cbc
-			aes_ctr
-			camellia_cbc
+	-A Authentication Method
+		hmac_md5
+		hmac_sha1
+		keyed_md5
+		keyed_sha1
+		hmac_sha256
+		hmac_sha384
+		hmac_sha512
+		hmac_sha384
+		aes_xcbc_mac
+		tcp_md5
+
+	-E Encapsulating Security Payload Method
+		des_cbc
+		3des_cbc
+		blowfish_cbc
+		cast128_cbc
+		des_deriv
+		3des_deriv
+		rijndael_cbc
+		twofish_cbc
+		aes_ctr
+		camellia_cbc
 
 ###EXAMPLES
+	spd add
+	content add 
+	sad add
 
 # License
 
