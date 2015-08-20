@@ -8,16 +8,19 @@
 
 ###COMMANDS
 
-####ip -- Manage network interface ip
+####ip
+	Manage network interface ip
+######Sub command
 	add -- allocate ip to network interface
 	remove -- free ip from network interface
-
-####spd -- Manage security policy databse entry
+#####spd
+	Manage security policy databse entry
+######Sub command
 	add -- Add security policy database entry
 	remove -- Remove security policy database entry
 	list -- List of security policy database entry
 
-######PARAMETER
+######Parameter
 	-p Protocols
 		Protocol specification.
 		any -- TCP & UDP
