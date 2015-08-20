@@ -1,10 +1,13 @@
 # PacketNgin IPSec
 
-# CLI
-	COMMAND BASIC FORMATS
+## CLI
+
+###COMMAND BASIC FORMATS
+
 	[command] [option]
 
-	COMMANDS
+###COMMANDS
+
 		spd Security policy databse entry
 			add -- Add security policy database entry
 			remove -- Remove security policy database entry
@@ -20,8 +23,8 @@
 			remove -- Remove security association entry
 			list --List security association entry
 	
-	PARAMETERS
-		-i interface <U>number</U>
+###PARAMETERS
+		-i interface number
 
 		-s address[/mask][:port]
 			Source specification.
@@ -67,7 +70,7 @@
 			aes_ctr
 			camellia_cbc
 
-	EXAMPLES
+###EXAMPLES
 
 # License
 
