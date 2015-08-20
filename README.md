@@ -4,17 +4,18 @@
 
 ###COMMANDS
 
-####ip -- Manage network interface ip
+####Manage network interface ip
+	ip -- Manage ip of network interface interface.
 ######SUB COMMANDS
-	add [interface][address]-- allocate ip to network interface
-	remove -- free ip from network interface
+	add [interface][address]-- Allocate ip to network interface.
+	remove -- Free ip from network interface.
 
-####spd -- Manage security policy databse entry
+####Manage SP
+	sp -- Manages SPD(Security Policy Database) entries in interface.
 ######SUB COMMANDS
-	add [protocol][source][destination][action][index] -- Add security policy database entry
-	remove [interface][index] -- Remove security policy database entry
-	list [interface] -- List of security policy database entry
-
+	add [protocol][source][destination][action][index] -- Add security policy database entry.
+	remove [interface][index] -- Remove SPD entry.
+	list [interface] -- Print list of SPD entry.
 ######PARAMETERS
 	-p Protocols
 		Protocol specification.
@@ -22,39 +23,44 @@
 		tcp -- TCP
 		udp -- UDP
 
-	-s [interface][address][/mask][:port]
+	-s [interface][@address][/mask][:port]
 		Source specification.
 		defalut address = any
 		default mask = 24
 		default port = any
 
-	-d [interface][address][/mask][:port]
+	-d [interface][@address][/mask][:port]
 		Destination specificiation.
 		defalut address = any
 		default mask = 24
 		default port = any
 
-	-a actions
-		ipsec -- IPSec process
-		bypass -- Bypass process
+	-a actions[/direction]
+		ipsec -- IPSec action
+		bypass -- Bypass action
 		default action = bypass
+		in -- in direction
+		out -- out direction
+		bi -- bidirectional
+		default direction = bi
 
 	-i index
 		Index of entry.
 		default index = 0
 
-####content -- Manage security policy entry's content
+####Manages contents
+	content -- Manages contents in SP.
 ######SUB COMMANDS
-	add [interface][SP index]-- Add content of security policy entry
-	remove [interface][SP index]-- Remove content of security policy entry
-	list [interface][SP index]-- List contents in security policy entry
-
+	add [interface][SP index]-- Add content to SP.
+	remove [interface][SP index]-- Remove content from SP.
+	list [interface][SP index]-- Print list of contents in SP.
 ######PARAMETERS
 	-m mode
 		tunnel -- tunnel mode
 		transport -- transport mode
 
-####sa -- Manage security association
+####Manage security association
+	sa -- Manage SA(Security Association) entries.
 ######SUB COMMANDS
 	add -- Add security association entry
 	remove -- Remove security association entry
@@ -89,7 +95,7 @@
 	ip add eth0 192.168.10.254
 	ip add eth1 192.168.11.254
 
-	spd add -p tcp -s eth0 192.168.10.0/24 -d eth1 192.168.100.0/24 -a ipsec
+	spd add -p tcp -s eth0 192.168.10.0/24 -d eth1 192.168.100.0/24 -a ipsec/bi
 	spd add -p any -a bypass -i 1
 
 	content add eth0
