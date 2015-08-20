@@ -8,11 +8,9 @@
 
 ###COMMANDS
 
-####ip
-	Manage network interface ip
-#####add
-	allocate ip to network interface
-		remove -- free ip from network interface
+####ip -- Manage network interface ip
+	* add -- allocate ip to network interface
+	* remove -- free ip from network interface
 
 ####spd
 	Manage security policy databse entry
