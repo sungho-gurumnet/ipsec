@@ -8,58 +8,68 @@
 
 ###COMMANDS
 
-	spd Security policy databse entry
+####ip
+	Manage network interface ip
+#####add
+	allocate ip to network interface
+		remove -- free ip from network interface
+
+####spd
+	Manage security policy databse entry
 		add -- Add security policy database entry
 		remove -- Remove security policy database entry
 		list -- List of security policy database entry
 
-	content Security policy database entry's content
+	content Manage security policy database entry's content
 		add -- Add security policy databse entry content
 		remove -- Remove security policy databse entry content
 		list -- List security policy databse entry content
 
-	sa Security association
+	sa Manage security association
 		add -- Add security association entry
 		remove -- Remove security association entry
 		list --List security association entry
 
 ###PARAMETERS
-
-	*-i* interface number
-
-	-s address[/mask][:port]
-		Source specification. defalut = any.
-
-	-d address[/mask][:port]
-		Destination specificiation. defalut = any.
-
 	-p Protocols
 		any -- TCP & UDP
 		tcp -- TCP
 		udp -- UDP
 
-	-p Priority
-		Priority of entry.
+	-s address[/mask][:port][interface]
+		Source specification.
+		defalut address = any
+		default mask = 24
+		default port = any
 
-	-a Actions
-		ipsec -- IPSec
-		bypass -- Bypass
+	-d address[/mask][:port][interface]
+		Destination specificiation.
+		defalut address = any
+		default mask = 24
+		default port = any
 
-	-k Key
+	-i index
+		Index of entry.
 
-	-A Authentication Method
+	-a actions
+		ipsec -- IPSec process.
+		bypass -- Bypass process.
+
+	-S SPI(security parameter index)
+
+	-A authentication method[key: HEX]
 		hmac_md5
 		hmac_sha1
-		keyed_md5
-		keyed_sha1
 		hmac_sha256
 		hmac_sha384
 		hmac_sha512
 		hmac_sha384
+		keyed_md5
+		keyed_sha1
 		aes_xcbc_mac
 		tcp_md5
 
-	-E Encapsulating Security Payload Method
+	-E encapsulating security payload method[key: HEX]
 		des_cbc
 		3des_cbc
 		blowfish_cbc
