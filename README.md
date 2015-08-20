@@ -8,19 +8,18 @@
 
 ###COMMANDS
 
-####ip
-	Manage network interface ip
-######Sub command
+####ip -- Manage network interface ip
+######SUB COMMANDS
 	add -- allocate ip to network interface
 	remove -- free ip from network interface
-#####spd
-	Manage security policy databse entry
-######Sub command
+
+####spd -- Manage security policy databse entry
+######SUB COMMANDS
 	add -- Add security policy database entry
 	remove -- Remove security policy database entry
 	list -- List of security policy database entry
 
-######Parameter
+######PARAMETERS
 	-p Protocols
 		Protocol specification.
 		any -- TCP & UDP
@@ -49,20 +48,24 @@
 		default index = 0
 
 ####content -- Manage security policy database entry's content
-	add -- Add security policy databse entry content
-	remove -- Remove security policy databse entry content
-	list -- List security policy databse entry content
+######SUB COMMANDS
+	add -- Add content security policy databse entry
+	remove -- Remove content of security policy databse entry
+	list -- List content security policy databse entry
 
-	sa -- Manage security association
-		add -- Add security association entry
-		remove -- Remove security association entry
-		list --List security association entry
+######PARAMETERS
+	-m mode
+		tunnel -- tunnel mode
+		transport -- transport mode
 
-###PARAMETERS
+####sa -- Manage security association
+######SUB COMMANDS
+	add -- Add security association entry
+	remove -- Remove security association entry
+	list --List security association entry
 
-	-S SPI(security parameter index)
-
-	-A authentication method[key: HEX]
+######PARAMETERS
+	-A authentication method[key: HEX][spi: HEX]
 		hmac_md5
 		hmac_sha1
 		hmac_sha256
@@ -74,7 +77,7 @@
 		aes_xcbc_mac
 		tcp_md5
 
-	-E encapsulating security payload method[key: HEX]
+	-E encapsulating security payload method[key: HEX][spi: HEX]
 		des_cbc
 		3des_cbc
 		blowfish_cbc
