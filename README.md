@@ -9,26 +9,17 @@
 ###COMMANDS
 
 ####ip -- Manage network interface ip
-	* add -- allocate ip to network interface
-	* remove -- free ip from network interface
+	add -- allocate ip to network interface
+	remove -- free ip from network interface
 
 ####spd -- Manage security policy databse entry
-	* add -- Add security policy database entry
-	* remove -- Remove security policy database entry
-	* list -- List of security policy database entry
+	add -- Add security policy database entry
+	remove -- Remove security policy database entry
+	list -- List of security policy database entry
 
-####content -- Manage security policy database entry's content
-	* add -- Add security policy databse entry content
-	* remove -- Remove security policy databse entry content
-	* list -- List security policy databse entry content
-
-####sa -- Manage security association
-	* add -- Add security association entry
-	* remove -- Remove security association entry
-	* list --List security association entry
-
-###PARAMETERS
+#####PARAMETER
 	-p Protocols
+		Protocol specification.
 		any -- TCP & UDP
 		tcp -- TCP
 		udp -- UDP
@@ -45,12 +36,26 @@
 		default mask = 24
 		default port = any
 
+	-a actions
+		ipsec -- IPSec process
+		bypass -- Bypass process
+		default action = bypass
+
 	-i index
 		Index of entry.
+		default index = 0
 
-	-a actions
-		ipsec -- IPSec process.
-		bypass -- Bypass process.
+####content -- Manage security policy database entry's content
+	add -- Add security policy databse entry content
+	remove -- Remove security policy databse entry content
+	list -- List security policy databse entry content
+
+	sa -- Manage security association
+		add -- Add security association entry
+		remove -- Remove security association entry
+		list --List security association entry
+
+###PARAMETERS
 
 	-S SPI(security parameter index)
 
