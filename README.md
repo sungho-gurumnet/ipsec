@@ -17,7 +17,7 @@
 	remove -- Remove security policy database entry
 	list -- List of security policy database entry
 
-#####PARAMETER
+######PARAMETER
 	-p Protocols
 		Protocol specification.
 		any -- TCP & UDP
