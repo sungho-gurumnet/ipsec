@@ -19,9 +19,12 @@ typedef enum {
 	SA_NONE,
 	SA_SPI,
 
+	SA_IPSEC_PROTOCOL,
 	SA_PROTOCOL,
 	SA_SOURCE_IP,
+	SA_SOURCE_MASK,
 	SA_DESTINATION_IP,
+	SA_DESTINATION_MASK,
 	SA_SOURCE_PORT,
 	SA_DESTINATION_PORT,
 
@@ -35,36 +38,38 @@ typedef enum {
 } SA_ATTRIBUTES;
 
 typedef struct _SA {
+	struct _SA* next;
 	uint32_t spi;
 	uint32_t src_ip;
+	uint32_t src_mask;
 	uint32_t dest_ip;
+	uint32_t dest_mask;
 	uint16_t src_port;
 	uint16_t dest_port; 
 	uint8_t protocol; 
+	uint8_t mode;
 	uint8_t lifetime;
  	Window* window;
 } SA;
 
 typedef struct _SA_ESP {
 	SA sa;
+	uint64_t iv;
 	uint8_t crypto_algorithm;
 	void* crypto;
-	uint64_t crypto_key[3];
+	uint64_t* crypto_key;
 
 	bool iv_support;
 	uint8_t auth_algorithm;
 	void* auth;
-	uint64_t esp_auth_key[8];
-	uint64_t iv;
+	uint64_t* auth_key;
 } SA_ESP;
 
 typedef struct _SA_AH {
 	SA sa;
 	uint8_t auth_algorithm;
 	void* auth;
-	uint64_t auth_key[3];
-	uint32_t t_src_ip;
-	uint32_t t_dest_ip;
+	uint64_t* auth_key;
 } SA_AH;
 
 SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs);

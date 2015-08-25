@@ -1,4 +1,4 @@
-#include <netj/ni.h>
+#include <net/ni.h>
 #include <util/map.h>
 #include <malloc.h>
 #define DONT_MAKE_WRAPPER
@@ -16,6 +16,7 @@ Socket* socket_create(NetworkInterface* ni, SP* sp, SA* sa) {
 
 	socket->sp = sp;
 	socket->sa = sa;
+	socket->fin = false;
 
 	return socket;
 }
@@ -72,6 +73,10 @@ bool socket_remove(NetworkInterface* ni, uint32_t ip, uint16_t port) {
 }
 
 Socket* socket_get(NetworkInterface* ni, uint32_t ip, uint16_t port) {
+	Map* sockets = ni_config_get(ni, SOCKETS);
+	if(!sockets)
+		return NULL;
+
 	uint64_t key = (uint64_t)ip << 32 | (uint64_t)port;
 
 	return map_get(sockets, (void*)key);

@@ -11,23 +11,26 @@
 #include "content.h"
 
 /* Action */
-#define BYPASS 		0x00
-#define IPSEC 		0x01
+#define ACTION_BYPASS		0x00
+#define ACTION_IPSEC		0x01
 /* protocol */
 #define IP_PROTOCOL_ANY         0x00
+/* in net/ip.h */
 // #define IP_PROTOCOL_IP          0x04	///< IP protocol number for IP
 // #define IP_PROTOCOL_UDP		0x11	///< IP protocol number for UDP
 // #define IP_PROTOCOL_TCP		0x06	///< IP protocol number for TCP
+#define PORT_ANY		0x00
 
 /* Direction */
-#define IN          0x01
-#define OUT         0x02
-#define INOUT	    0x03
+#define DIRECTION_IN		0x01
+#define DIRECTION_OUT		0x02
+//#define DIRECTION_BI		0x03
+
 /* Level */
-#define DEFAULT     0x01    
-#define USE         0x02
-#define REQUIRE     0x03
-#define UNIQUE      0x04
+#define DEFAULT			0x01    
+#define USE			0x02
+#define REQUIRE			0x03
+#define UNIQUE			0x04
 
 typedef enum {
 	SP_NONE,
@@ -35,14 +38,14 @@ typedef enum {
 
 	SP_PROTOCOL,
 	SP_IS_PROTOCOL_SA_SHARE,
-	SP_SOURCE_IP_ADDR,
+	SP_SOURCE_IP,
 	SP_IS_SOURCE_IP_SA_SHARE,
 	SP_SOURCE_NET_MASK,
 	SP_SOURCE_PORT,
 	SP_IS_SOURCE_PORT_SA_SHARE,
 
 	SP_OUT_NI,
-	SP_DESTINATION_IP_ADDR,
+	SP_DESTINATION_IP,
 	SP_IS_DESTINATION_IP_SA_SHARE,
 	SP_DESTINATION_NET_MASK,
 	SP_DESTINATION_PORT,
@@ -52,6 +55,8 @@ typedef enum {
 } SP_ATTRIBUTES;
 
 typedef struct _SP{
+	NetworkInterface* ni;
+	NetworkInterface* out_ni;
 	uint8_t direction;
 
 	uint8_t protocol;
@@ -63,7 +68,6 @@ typedef struct _SP{
 	uint16_t src_port;
 	bool is_src_port_sa_share;
 
-	NetworkInterface* out_ni;
 	uint32_t dest_ip;
 	uint32_t dest_mask;
 	bool is_dest_ip_sa_share;
@@ -79,9 +83,10 @@ typedef struct _SP{
 } SP;
 
 SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs);
-bool sp_free(NetworkInterface* ni, SP* sp);
-bool sp_content_add(SP* sp, Content* content, int priority);
-bool sp_content_delete(SP* sp, int index);
-bool sp_sa_add(SP* sp, SA* sa, uint8_t direction);
-SA* sp_sa_get(SP* sp, Content* con, IP* ip, uint8_t direction);
+bool sp_free(SP* sp);
+bool sp_add_content(SP* sp, Content* content, int priority);
+Content* sp_remove_content(SP* sp, int index);
+bool sp_add_sa(SP* sp, SA* sa, uint8_t direction);
+bool sp_remove_sa(SP* sp, SA* sa);
+SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct);
 #endif /* __sp_H__ */

@@ -8,7 +8,21 @@
 
 #include "spd.h"
 
-SP* spd_get(NetworkInterface* ni, IP* ip) {
+List* spd_get(NetworkInterface* ni) {
+	List* spd = ni_config_get(ni, SPD);
+
+	return spd;
+}
+
+SP* spd_get_sp_index(NetworkInterface* ni, uint16_t index) {
+	List* spd = ni_config_get(ni, SPD);
+	if(!spd)
+		return NULL;
+
+	return list_get(spd, index);
+}
+
+SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
 	List* spd = ni_config_get(ni, SPD);
 	if(!spd)
 		return NULL;
@@ -18,32 +32,39 @@ SP* spd_get(NetworkInterface* ni, IP* ip) {
 	
 	while(list_iterator_has_next(&iter)) {
 		SP* sp = list_iterator_next(&iter);
-		if(!(sp->protocol) || ip->protocol == sp->protocol) {
-			if(!(sp->src_ip) || ((endian32(ip->source) & sp->src_mask) == (sp->src_ip & sp->src_mask))) {
-				if(!(sp->dest_ip) || ((endian32(ip->destination) & sp->dest_mask) == (sp->dest_ip & sp->dest_mask))) {
-					switch(ip->protocol) {
-						case IP_PROTOCOL_TCP:;
-							TCP* tcp = (TCP*)ip->body;
-							if((sp->src_port == PORT_ANY) || (endian16(tcp->source) == sp->src_port)) {
-								if((sp->dest_port == PORT_ANY) || (endian16(tcp->destination) == sp->dest_port)) {
-									return sp;
-								}
-							}
-							break;
+		if(!(!(sp->protocol) || ip->protocol == sp->protocol))
+			continue;
 
-						case IP_PROTOCOL_UDP:;
-							UDP* udp = (UDP*)ip->body;
-							if((sp->src_port == PORT_ANY) || (endian16(udp->source) == sp->src_port)) {
-								if((sp->dest_port == PORT_ANY) || (endian16(udp->destination) == sp->dest_port)) {
-									return sp;
-								}
-							}
-							break;
-						default:
-							return sp;
-					}
-				}
-			}
+		if(!(!(sp->src_ip) || ((endian32(ip->source) & sp->src_mask) == (sp->src_ip & sp->src_mask))))
+			continue;
+
+		if(!(!(sp->dest_ip) || ((endian32(ip->destination) & sp->dest_mask) == (sp->dest_ip & sp->dest_mask))))
+			continue;
+
+		switch(ip->protocol) {
+			case IP_PROTOCOL_TCP:
+				;
+				TCP* tcp = (TCP*)ip->body;
+				if(!((sp->src_port == PORT_ANY) || (endian16(tcp->source) == sp->src_port)))
+					continue;
+
+				if(!((sp->dest_port == PORT_ANY) || (endian16(tcp->destination) == sp->dest_port)))
+					continue;
+
+				return sp;
+			case IP_PROTOCOL_UDP:
+				;
+				UDP* udp = (UDP*)ip->body;
+				if(!((sp->src_port == PORT_ANY) || (endian16(udp->source) == sp->src_port)))
+					continue;
+
+				if(!((sp->dest_port == PORT_ANY) || (endian16(udp->destination) == sp->dest_port)))
+					continue;
+
+				return sp;
+
+			default:
+				continue;
 		}
 	}
 	return NULL;
@@ -98,6 +119,6 @@ void spd_delete_all(NetworkInterface* ni) {
 
 	while((list_iterator_has_next(&iter))) {
 		SP* sp = list_iterator_remove(&iter);
-		sp_delete(sp);
+		sp_free(sp);
 	}
 }

@@ -14,6 +14,7 @@
 #include "sa.h"
 //#include "esp.h"
 
+#define CRYPTO_NONE			0x00
 #define CRYPTO_DES_CBC			0x01
 #define CRYPTO_3DES_CBC			0x02
 #define CRYPTO_BLOWFISH_CBC		0x03
@@ -26,8 +27,8 @@
 #define CRYPTO_CAMELLIA_CBC		0x10
 
 typedef struct _Cryptography{
-	void(*encrypt)(void* payload, size_t size, SA* sa);
-	void(*decrypt)(void* payload, size_t size, SA* sa);
+	void(*encrypt)(void* payload, size_t size, SA_ESP* sa);
+	void(*decrypt)(void* payload, size_t size, SA_ESP* sa);
 } Cryptography;
 
 Cryptography* get_cryptography(int algorithm);

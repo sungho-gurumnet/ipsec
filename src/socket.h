@@ -1,6 +1,7 @@
 #ifndef __SOCKET_H__
 #define __SOCKET_H__
-#include <netj/ni.h>
+#include <net/ni.h>
+#include <stdbool.h>
 #include "sp.h"
 #include "sa.h"
 
@@ -9,6 +10,7 @@
 typedef struct _Socket{
 	SP* sp;
 	SA* sa;
+	bool fin;
 } Socket;
 
 

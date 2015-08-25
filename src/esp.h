@@ -1,6 +1,8 @@
 #ifndef __ESP_H__
 #define __ESP_H__
 
+#include <util/types.h>
+
 #define ESP_HEADER_LEN 	16
 #define ESP_TRAILER_LEN	2
 #define ICV_LEN			12

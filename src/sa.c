@@ -62,6 +62,8 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 		printf("Can'nt found protocol\n");
 		return NULL;
 	}
+	sa->src_mask = 0xffffffff;
+	sa->dest_mask = 0xffffffff;
 
 	for(int i = 0; (attrs[i * 2] != SA_NONE); i++) {
 		switch(attrs[i * 2]) {
@@ -70,8 +72,17 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 			case SA_SOURCE_IP:
 				sa->src_ip = attrs[i * 2 + 1];
 				break;
+			case SA_SOURCE_MASK:
+				sa->src_mask = attrs[i * 2 + 1];
+				break;
 			case SA_DESTINATION_IP:
 				sa->dest_ip = attrs[i * 2 + 1];
+				break;
+			case SA_DESTINATION_MASK:
+				sa->dest_mask = attrs[i * 2 + 1];
+				break;
+			case SA_SOURCE_PORT:
+				sa->src_port = attrs[i * 2 + 1];
 				break;
 			case SA_DESTINATION_PORT:
 				sa->dest_port = attrs[i * 2 + 1];

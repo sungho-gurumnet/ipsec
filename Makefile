@@ -1,7 +1,6 @@
 .PHONY: run all depend clean
 #-nostdinc 
-CFLAGS = -I ../../include -O2 -Wall -g -m64 -ffreestanding -std=gnu99 -Werror -fno-stack-protector -D_GW1_ 
-
+CFLAGS = -I ../../include -O2 -Wall -g -m64 -ffreestanding -std=gnu99 -Werror -fno-stack-protector
 DIR = obj 
 
 OBJS = obj/sad.o obj/sa.o obj/spd.o obj/sp.o obj/crypto.o obj/auth.o obj/main.o \

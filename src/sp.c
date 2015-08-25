@@ -1,3 +1,7 @@
+#include <malloc.h>
+#define DONT_MAKE_WRAPPER
+#include <_malloc.h>
+#undef DONT_MAKE_WRAPPER
 #include "sp.h"
 
 SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
@@ -17,9 +21,9 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
 				sp->protocol = attrs[i * 2 + 1];
 				break;
 			case SP_IS_PROTOCOL_SA_SHARE:
-				sp->is_protocol_share = attrs[i * 2 + 1];
+				sp->is_protocol_sa_share = attrs[i * 2 + 1];
 				break;
-			case SP_SOURCE_IP_ADDR:
+			case SP_SOURCE_IP:
 				sp->src_ip = attrs[i * 2 + 1];
 				break;
 			case SP_SOURCE_NET_MASK:
@@ -35,21 +39,21 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
 				sp->is_src_port_sa_share = attrs[i * 2 + 1];
 				break;
 			case SP_OUT_NI:
-				sp->out_ni = attrs[i * 2 + 1];
+				sp->out_ni = (NetworkInterface*)attrs[i * 2 + 1];
 				break;
-			case SP_DESTINATION_IP_ADDR:
+			case SP_DESTINATION_IP:
 				sp->dest_ip = attrs[i * 2 + 1];
 				break;
 			case SP_DESTINATION_NET_MASK:
 				sp->dest_mask = attrs[i * 2 + 1];
 				break;
-			case SP_IS_DESTINATION_IP_ADDR:
-				sp->is_dest_ip_sa_share = attr[i * 2 + 1];
+			case SP_IS_DESTINATION_IP_SA_SHARE:
+				sp->is_dest_ip_sa_share = attrs[i * 2 + 1];
 				break;
 			case SP_DESTINATION_PORT:
 				sp->dest_port = attrs[i * 2 + 1];
 				break;
-			case SP_DESTINATION_PORT_SHARE:
+			case SP_IS_DESTINATION_PORT_SHARE:
 				sp->is_dest_port_sa_share = attrs[i * 2 + 1];
 				break;
 			case SP_ACTION:
@@ -58,25 +62,28 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
 		}
 	}
 
+	sp->ni = ni;
+
 	return sp;
 }
 
-bool sp_free(NetworkInterface* ni, SP* sp) {
+bool sp_free(SP* sp) {
 	if(sp->sa_inbound)
 		list_destroy(sp->sa_inbound);
 	if(sp->sa_outbound)
 		list_destroy(sp->sa_outbound);
-	if(sp->contents)
+	if(sp->contents) {
 		list_destroy(sp->contents);
+	}
 
-	__free(sp, ni->pool);
+	__free(sp, sp->ni->pool);
 
 	return true;
 }
 
 bool sp_add_content(SP* sp, Content* content, int priority) {
 	if(!sp->contents) {
-		sp->contents = list_create(ni->pool);
+		sp->contents = list_create(sp->ni->pool);
 		if(!sp->contents) {
 			printf("Can'nt allocate contents list\n");
 			return false;
@@ -98,7 +105,7 @@ Content* sp_get_content(SP* sp, int index) {
 	if(!sp->contents)
 		return NULL;
 
-	Content* content = list_get(sp->contetns, index);
+	Content* content = list_get(sp->contents, index);
 
 	return content;
 }
@@ -121,13 +128,13 @@ Content* sp_remove_content(SP* sp, int index) {
 
 bool sp_add_sa(SP* sp, SA* sa, uint8_t direction) {
 	switch(direction) {
-		case IN:
+		case DIRECTION_IN:
 			return list_add(sp->sa_inbound, sa);
-		case OUT:
+		case DIRECTION_OUT:
 			return list_add(sp->sa_outbound, sa);
-		case INOUT:
-			//TODO
-			break;
+ //		case INOUT:
+ //			//TODO
+ //			break;
 	}
 
 	return false;
@@ -135,6 +142,7 @@ bool sp_add_sa(SP* sp, SA* sa, uint8_t direction) {
 
 bool sp_remove_sa(SP* sp, SA* sa) {
 	//TODO
+	return true;
 }
 
 //TODO
@@ -154,34 +162,78 @@ SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 
 	while(list_iterator_has_next(&iter)) {
 		SA* sa = list_iterator_next(&iter);
-		if(sp->is_protocol_share || (sp->protocol == sa->protocol)) {
-			if(sp->src_ip_share || endian32(ip->source) == sa->src_ip) {
-				if(sp->dest_ip_share || endian32(ip->destination) == sa->dest_ip) {
-					switch(ip->protocol) {
-						case IP_PROTOCOL_TCP:;
-							TCP* tcp = (TCP*)ip->body;
-							if((sp->src_port_share == true) || (endian16(tcp->source) == sa->src_port)) {
-								if((sp->dest_port_share == true) || (endian16(tcp->destination) == sa->dest_port)) {
-									return sa;
-								}
-							}
-							break;
+		uint8_t protocol;
+		if(sp->is_protocol_sa_share) {
+			protocol = sp->protocol;
+		} else {
+			protocol = ip->protocol;
+		}
+		if(protocol != sa->protocol)
+			continue;
 
-						case IP_PROTOCOL_UDP:;
-							UDP* udp = (UDP*)ip->body;
-							if((sp->src_port_share == true) || (endian16(udp->source) == sa->src_port)) {
-								if((sp->dest_port_share == true) || (endian16(udp->destination) == sa->dest_port)) {
-									return sa;
-								}
-							}
-							break;
+		uint32_t src_ip;
+		if(sp->is_src_ip_sa_share) {
+			src_ip = sp->src_ip;
+		} else {
+			src_ip = endian32(ip->source);
+		}
+		if(src_ip != sa->src_ip)
+			continue;
 
-						default:
-							return sa;
-					}
+		uint32_t dest_ip;
+		if(sp->is_dest_ip_sa_share) {
+			dest_ip = sp->dest_ip;
+		} else {
+			dest_ip = endian32(ip->destination);
+		}
+		if(dest_ip != sa->dest_ip)
+			continue;
+
+		uint16_t src_port;
+		uint16_t dest_port;
+		switch(ip->protocol) {
+			case IP_PROTOCOL_TCP:
+				;
+				TCP* tcp = (TCP*)ip->body;
+				if(sp->is_src_port_sa_share) {
+					src_port = sp->src_port;
+				} else {
+					src_port = endian16(tcp->source);
 				}
-				
-			}
+				if(src_port != sa->src_port)
+					continue;
+
+				if(sp->is_dest_port_sa_share) {
+					dest_port = sp->dest_port;
+				} else {
+					dest_port = endian16(tcp->destination);
+				}
+				if(dest_port != sa->dest_port)
+					continue;
+
+				return sa;
+			case IP_PROTOCOL_UDP:
+				;
+				UDP* udp = (UDP*)ip->body;
+				if(sp->is_src_port_sa_share) {
+					src_port = sp->src_port;
+				} else {
+					src_port = endian16(udp->source);
+				}
+				if(src_port != sa->src_port)
+					continue;
+
+				if(sp->is_dest_port_sa_share) {
+					dest_port = sp->dest_port;
+				} else {
+					dest_port = endian16(udp->destination);
+				}
+				if(dest_port != sa->dest_port)
+					continue;
+
+				return sa;
+			default:
+				continue;
 		}
 	}
 

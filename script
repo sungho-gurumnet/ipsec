@@ -2,22 +2,21 @@ connect 192.168.100.254
 $vmid = create core: 1 memory: 0x1000000 storage: 0x1000000 nic: mac: 0 dev: eth0 ibuf: 1024 obuf: 1024 iband: 1000000000 oband: 1000000000 pool: 0x400000 nic: mac: 0 dev: eth0 ibuf: 1024 obuf: 1024 iband: 1000000000 oband: 1000000000 pool: 0x400000 args: hello world
 upload $vmid main
 start $vmid
-#IP ADD
-stdin $vmid 0 "ip add 192.168.100.254 0"
-stdin $vmid 0 "ip add 192.168.100.253 1"
-stdin $vmid 0 "ip add 192.168.100.252 2"
-stdin $vmid 0 "ip add 192.168.100.251 3"
 
-#SP ADD
-stdin $vmid 0 "spd add src: ip: 0xc0a864c8 mask: 0xffffff00 port: 0 dst: ip: 0xc0a8640a mask: 0xffffff00 port: 0 direction: INOUT action: IPSEC protocol: IP_PROTOCOL_ANY priority: 0"
+#Manage IP
+stdin $vmid 0 "ip add 0 192.168.100.200"
+stdin $vmid 0 "ip add 1 192.168.100.201"
+
+#Manage SP
+stdin $vmid 0 "spd add -i 0 -s 192.168.100.0/24 -p -t 8080 -o eth1 direction: INOUT action: ipsec priority: 0"
 stdin $vmid 0 "spd add src: ip: 0 mask: 0 port: 0 dst: ip: 0 mask: 0 port: 0 direction: INOUT action: BYPASS protocol: IP_PROTOCOL_ANY priority: 9"
 #stdin $vmid 0 "spd add src: ip: 0xc0a80a65 mask: 0xffffff00 port: 7 dst: ip: 0xc0a80a0f mask: 0xffffff00 port: 7 direction: INOUT action: IPSEC protocol: IP_PROTOCOL_ANY priority: 0"
 
-#Content ADD
+#Manage Content
 stdin $vmid 0 "content add index: 0 protocol: AH mode: TRANSPORT auth: algorithm: HMAC_MD5 priority: 0"
 stdin $vmid 0 "content add index: 0 protocol: ESP mode: TUNNEL src_ip: 0xc0a80a0a dst_ip: 0xc0a80a01 crypto: algorithm: DES_CBC auth: algorithm: HMAC_MD5 priority: 0"
 
-#SA ADD
+#Manage SA
 stdin $vmid 0 "sad add src_ip: 0xc0a864c8 dst_ip: 0xc0a80a0a protocol: ESP spi: 0xeaeaeaea extensions: 0 crypto: algorithm: DES_CBC key: 0 key: 1 key: 2 auth: algorithm: HMAC_MD5 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0"
 stdin $vmid 0 "sad add src_ip: 0xc0a864c8 dst_ip: 0xc0a8640a protocol: AH spi: 0xeaeaeaea extensions: 0 crypto: algorithm: DES_CBC key: 0 key: 0 key: 0 auth: algorithm: HMAC_MD5 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0"
 stdin $vmid 0 "spd dump"

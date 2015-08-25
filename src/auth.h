@@ -9,6 +9,7 @@
 
 #include "sa.h"
 
+#define AUTH_NONE		0X00
 #define AUTH_HMAC_MD5		0x01
 #define AUTH_HMAC_SHA1		0x02
 #define AUTH_KEYED_MD5		0x03

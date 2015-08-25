@@ -83,10 +83,10 @@ bool tunnel_unset(Packet* packet, uint16_t header_len, uint16_t tail_len) {
 	packet->start += (header_len + IP_LEN);
 	packet->end -= tail_len;
 
-	Ether* ether = (Ether*)(packet->buffer + packet->start);
-	IP* ip = (IP*)ether->payload;
-
-	ether->type = endian16(ETHER_TYPE_IPV4);
+ //	Ether* ether = (Ether*)(packet->buffer + packet->start);
+ //	IP* ip = (IP*)ether->payload;
+ //
+ //	ether->type = endian16(ETHER_TYPE_IPv4);
 
 	return true;
 }
