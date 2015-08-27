@@ -32,33 +32,33 @@ SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
 	
 	while(list_iterator_has_next(&iter)) {
 		SP* sp = list_iterator_next(&iter);
-		if(!(!(sp->protocol) || ip->protocol == sp->protocol))
+		if(sp->protocol && (ip->protocol != sp->protocol))
 			continue;
 
-		if(!(!(sp->src_ip) || ((endian32(ip->source) & sp->src_mask) == (sp->src_ip & sp->src_mask))))
+		if(sp->src_ip && ((endian32(ip->source) & sp->src_mask) != (sp->src_ip & sp->src_mask)))
 			continue;
 
-		if(!(!(sp->dest_ip) || ((endian32(ip->destination) & sp->dest_mask) == (sp->dest_ip & sp->dest_mask))))
+		if(sp->dest_ip && ((endian32(ip->destination) & sp->dest_mask) != (sp->dest_ip & sp->dest_mask)))
 			continue;
 
 		switch(ip->protocol) {
 			case IP_PROTOCOL_TCP:
 				;
 				TCP* tcp = (TCP*)ip->body;
-				if(!((sp->src_port == PORT_ANY) || (endian16(tcp->source) == sp->src_port)))
+				if(sp->src_port && (endian16(tcp->source) != sp->src_port))
 					continue;
 
-				if(!((sp->dest_port == PORT_ANY) || (endian16(tcp->destination) == sp->dest_port)))
+				if(sp->dest_port && (endian16(tcp->destination) != sp->dest_port))
 					continue;
 
 				return sp;
 			case IP_PROTOCOL_UDP:
 				;
 				UDP* udp = (UDP*)ip->body;
-				if(!((sp->src_port == PORT_ANY) || (endian16(udp->source) == sp->src_port)))
+				if(sp->src_port || (endian16(udp->source) != sp->src_port))
 					continue;
 
-				if(!((sp->dest_port == PORT_ANY) || (endian16(udp->destination) == sp->dest_port)))
+				if(sp->dest_port || (endian16(udp->destination) != sp->dest_port))
 					continue;
 
 				return sp;

@@ -79,7 +79,7 @@ bool sad_add_sa(NetworkInterface* ni, SA* sa) {
 		}
 	}
 
-	uint64_t key = ((uint64_t)sa->protocol << 32) | (uint64_t)sa->spi; /* Protocol(8) + SPI(32)*/
+	uint64_t key = ((uint64_t)sa->ipsec_protocol << 32) | (uint64_t)sa->spi; /* Protocol(8) + SPI(32)*/
 
 	List* dest_list = map_get(sad, (void*)key);
 	if(!dest_list) {

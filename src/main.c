@@ -1,5 +1,10 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+#include <malloc.h>
+#define DONT_MAKE_WRAPPER
+#include <_malloc.h>
+#undef DONT_MAKE_WRAPPER
 #include <thread.h>
 #include <readline.h>
 #include <net/ni.h>
@@ -55,31 +60,63 @@ static uint32_t str_to_addr(char* argv) {
 	return address;
 }
 
-static bool parse_key(char* argv, uint64_t** key) {
+static bool parse_key(NetworkInterface* ni, char* argv, uint64_t** key, uint16_t key_length) {
 	if(strncmp("0x", argv, 2)) {
 		return false;
 	}
 
 	ssize_t length = strlen(argv) - 2;
-	*key = malloc(length);
+	length /= 2;
+	//check keylength
+	if(length > key_length)
+		return false;
+
+	*key = __malloc(key_length, ni->pool);
+	if(!(*key)) {
+		printf("Can'nt allocate key\n");
+		return false;
+	}
+	memset(*key, 0, key_length);
+
+	uint8_t* _key = (uint8_t*)*key;
+
+	char buf[5];
+	strcpy(buf, "0x00");
+	for(int  i = 0; i < length; i++) {
+		memcpy(buf + 2, argv + strlen(argv) - (2 * (i + 1)), 2);
+		uint8_t value = parse_uint8(buf);
+		*_key = value;
+		_key++;
+	}
+
+	if(!!((strlen(argv) - 2) % 2)) {
+		strcpy(buf, "0x0");
+		memcpy(buf + 2, argv + 2, 1);
+		uint8_t value = parse_uint8(buf);
+		*_key = value;
+	}
 
 	return true;
 }
 
 static NetworkInterface* parse_ni(char* argv) {
-	if(!strncmp(argv, "eth", 3))
+	if(strncmp(argv, "eth", 3)) {
 		return NULL;
+	}
 
 	char* next;
 	uint16_t index = strtol(argv + 3, &next, 0);
-	if(next == argv + 3)
+	if(next == argv + 3) {
 		return NULL;
+	}
 
-	if(*next != '\0' && *next != '@')
+	if(*next != '\0' && *next != '@') {
 		return NULL;
+	}
 
-	if(index >= ni_count())
+	if(index >= ni_count()) {
 		return NULL;
+	}
 
 	return ni_get(index);
 }
@@ -157,8 +194,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				printf("Can'nt found Network Interface\n");
 			}
 
-			uint8_t ipsec_protocol = IP_PROTOCOL_ESP;
-			uint32_t protocol = IP_PROTOCOL_ANY;
+			uint8_t protocol = IP_PROTOCOL_ANY;
 			uint32_t src_ip = 0;
 			uint32_t src_mask = 0xffffffff;
 			uint16_t src_port = 0;
@@ -166,23 +202,26 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 			uint32_t dest_mask = 0xffffffff;
 			uint16_t dest_port = 0;
 			uint32_t spi = 0;
-			//uint8_t extensions = 0;
-			uint8_t crypto_algorithm = 0;
-			uint8_t auth_algorithm = 0;
-			uint64_t* crypto_key;
-			uint64_t* auth_key;
 
+			uint8_t crypto_algorithm = 0;
+			uint64_t* crypto_key = NULL;
+			uint16_t crypto_key_length = 0;
+			uint8_t auth_algorithm = 0;
+			uint64_t* auth_key = NULL;
+			uint16_t auth_key_length = 0;
+
+			i++;
 			for(; i < argc; i++) {
 				if(!strcmp(argv[i], "-p")) {
 					i++;
-					if(!strcmp(argv[i], "esp")) {
-						protocol = IP_PROTOCOL_ESP;
-					} else if(!strcmp(argv[i], "ah")) {
-						protocol = IP_PROTOCOL_AH;
-					} else {
-						printf("Invalid protocol\n");
+					if(!strcmp(argv[i], "tcp")) {
+						protocol = IP_PROTOCOL_TCP;
+					} else if(!strcmp(argv[i], "udp")) {
+						protocol = IP_PROTOCOL_UDP;
+					} else if(!strcmp(argv[i], "any")){
+						protocol = IP_PROTOCOL_ANY;
+					} else 
 						return i;
-					}
 				} else if(!strcmp(argv[i], "-s")) {
 					i++;
 					if(!parse_addr_mask_port(argv[i], &src_ip, &src_mask, &src_port)) {
@@ -200,18 +239,128 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 
 					if(!strcmp(argv[i], "des_cbc")) {
 						crypto_algorithm = CRYPTO_DES_CBC;
+						crypto_key_length = 8;	//8bytes;
+						i++;
+						if(!parse_key(ni, argv[i], &crypto_key, 8)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "3des_cbc")) {
 						crypto_algorithm = CRYPTO_3DES_CBC;
+						crypto_key_length = 24;
+						i++;
+						if(!parse_key(ni, argv[i], &crypto_key, 24)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "blowfish_cbc")) {
+						/* blow fish key length 5~ 56 bytes */
 						crypto_algorithm = CRYPTO_BLOWFISH_CBC;
+						i++;
+						if(strncmp("0x", argv[i], 2)) {
+							printf("Wrong key length\n");
+							return i;
+						}
+
+						crypto_key_length = strlen(argv[i]) - 2;
+						crypto_key_length = crypto_key_length / 2 + !!(crypto_key_length % 2);
+						if(crypto_key_length > 56) {
+							printf("Wrong key length\n");
+							return i;
+						}
+
+						uint16_t key_length = crypto_key_length;
+						if(key_length % 8) {
+							key_length -= key_length % 8;
+							key_length += 8;
+						}
+						if(!parse_key(ni, argv[i], &crypto_key, key_length)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "cast128_cbc")) {
+						/* cast128 key length 5 ~56 bytes */
 						crypto_algorithm = CRYPTO_CAST128_CBC;
+						i++;
+						if(strncmp("0x", argv[i], 2)) {
+							printf("Wrong key length\n");
+							return i;
+						}
+
+						crypto_key_length = strlen(argv[i]) - 2;
+						crypto_key_length = crypto_key_length / 2 + !!(crypto_key_length % 2);
+						if(crypto_key_length > 56) {
+							printf("Wrong key length\n");
+							return i;
+						}
+
+						uint16_t key_length = crypto_key_length;
+						if(key_length % 8) {
+							key_length -= key_length % 8;
+							key_length += 8;
+						}
+						if(!parse_key(ni, argv[i], &crypto_key, key_length)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "rijndael_cbc")) {
 						crypto_algorithm = CRYPTO_RIJNDAEL_CBC;
-					} else if(!strcmp(argv[i], "aes_ctr")) {
-						crypto_algorithm = CRYPTO_AES_CTR;
+						i++;
+						if(strncmp("0x", argv[i], 2)) {
+							printf("Wrong key length\n");
+							return i;
+						}
+
+						crypto_key_length = strlen(argv[i]) - 2;
+						crypto_key_length = crypto_key_length / 2 + !!(crypto_key_length % 2);
+						if(crypto_key_length > 32) {
+							printf("Wrong key length\n");
+							return i;
+						}
+						if(crypto_key_length > 24)
+							crypto_key_length = 32;
+						else if(crypto_key_length > 16)
+							crypto_key_length = 24;
+						else
+							crypto_key_length = 16;
+
+						if(!parse_key(ni, argv[i], &crypto_key, crypto_key_length)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "camellia_cbc")) {
 						crypto_algorithm = CRYPTO_CAMELLIA_CBC;
+						i++;
+						if(strncmp("0x", argv[i], 2)) {
+							printf("Wrong key length\n");
+							return i;
+						}
+
+						crypto_key_length = strlen(argv[i]) - 2;
+						crypto_key_length = crypto_key_length / 2 + !!(crypto_key_length % 2);
+						if(crypto_key_length > 32) {
+							printf("Wrong key length\n");
+							return i;
+						}
+						if(crypto_key_length > 24)
+							crypto_key_length = 32;
+						else if(crypto_key_length > 16)
+							crypto_key_length = 24;
+						else
+							crypto_key_length = 16;
+
+						if(!parse_key(ni, argv[i], &crypto_key, crypto_key_length)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
+					} else if(!strcmp(argv[i], "aes_ctr")) {
+						crypto_algorithm = CRYPTO_AES_CTR;
+						crypto_key_length = 16;
+						i++;
+						if(!parse_key(ni, argv[i], &crypto_key, 16)) {
+							printf("Wrong crypto key\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "twofish_cbc")) {
 						//crypto_algorithm = CRYPTO_TWOFISH_CBC;
 						printf("Not yet support\n");
@@ -230,12 +379,6 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 					}
 
 					i++;
-					if(!parse_key(argv[i], &crypto_key)) {
-						printf("Wrong key\n");
-						return i;
-					}
-
-					i++;
 					if(!is_uint32(argv[i])) {
 						printf("Wrong spi\n");
 						return i;
@@ -246,16 +389,47 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 
 					if(!strcmp(argv[i], "hmac_md5")) {
 						auth_algorithm = AUTH_HMAC_MD5;
+						i++;
+						auth_key_length = 16;
+						if(!parse_key(ni, argv[i], &auth_key, 16)) {
+							printf("AH key  wrong\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "hmac_sha1")) {
 						auth_algorithm = AUTH_HMAC_SHA1;
+						auth_key_length = 20;
+						if(!parse_key(ni, argv[i], &auth_key, 20)) {
+							printf("AH key  wrong\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "hmac_sha256")) {
 						auth_algorithm = AUTH_HMAC_SHA256;
+						auth_key_length = 32;
+						if(!parse_key(ni, argv[i], &auth_key, 32)) {
+							printf("AH key  wrong\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "hmac_sha384")) {
 						auth_algorithm = AUTH_HMAC_SHA384;
+						auth_key_length = 48;
+						if(!parse_key(ni, argv[i], &auth_key, 48)) {
+							printf("AH key  wrong\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "hmac_sha512")) {
 						auth_algorithm = AUTH_HMAC_SHA512;
+						auth_key_length = 64;
+						if(!parse_key(ni, argv[i], &auth_key, 64)) {
+							printf("AH key  wrong\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "hmac_ripemd160")) {
 						auth_algorithm = AUTH_HMAC_RIPEMD160;
+						auth_key_length = 20;
+						if(!parse_key(ni, argv[i], &auth_key, 20)) {
+							printf("AH key  wrong\n");
+							return i;
+						}
 					} else if(!strcmp(argv[i], "keyed_md5")) {
 						//auth_algorithm = AUTH_KEYED_MD5;
 						printf("Not yet support\n");
@@ -277,12 +451,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						return i;
 					}
 
-					i++;
-					if(!parse_key(argv[i], &auth_key)) {
-						printf("Wrong key\n");
-						return i;
-					}
-
+					//TODO: case not esp
 					i++;
 					if(!is_uint32(argv[i])) {
 						printf("Wrong spi\n");
@@ -295,11 +464,13 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				}
 			}
 
-			
+			if(!(crypto_algorithm || auth_algorithm)) {
+				printf("Algorithm not setted\n");
+				return i;
+			}
 			uint64_t attrs[] = {
-				SA_IPSEC_PROTOCOL, ipsec_protocol,
-				SA_PROTOCOL, protocol,
 				SA_SPI, spi,
+				SA_PROTOCOL, protocol,
 				SA_SOURCE_IP, src_ip,
 				SA_SOURCE_MASK, src_mask,
 				SA_DESTINATION_IP, dest_ip,
@@ -309,11 +480,13 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 
 				SA_CRYPTO_ALGORITHM, crypto_algorithm,
 				SA_CRYPTO_KEY, (uint64_t)crypto_key,
+				SA_CRYPTO_KEY_LENGTH, crypto_key_length,
 				//SA_IV_SUPPORT, iv,
 				SA_AUTH_ALGORITHM, auth_algorithm,
 				SA_AUTH_KEY, (uint64_t)auth_key,
+				SA_AUTH_KEY_LENGTH, auth_key_length,
 
-				//SA_REPLY,
+				SA_REPLY, true,
 				SA_NONE,
 			};
 
@@ -322,6 +495,12 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				printf("can't create SA\n");
 				return -1;
 			}
+
+			if(!sad_add_sa(ni, sa)) {
+				printf("Can'nt add SA\n");
+				return -1;
+			}
+			printf("Security Association added\n");
 
  //			if(sad_add_sa(ni, sa)) {
  //				SP* sp = spd_get_index(ni, 0);
@@ -379,21 +558,163 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
  //
 			return 0;
 		} else if(!strcmp(argv[i], "list")) {
-			i++;
-			NetworkInterface* ni = parse_ni(argv[i]);
-			if(!ni) {
-				printf("Can'nt found Network Interface\n");
+			printf("NI\tProtocol\tAlgorithm:Key\n");
+			void dump_sad(uint16_t ni_index) {
+				void crypto_algorithm_dump(uint8_t crypto_algorithm) {
+					switch(crypto_algorithm) {
+						case CRYPTO_NONE:
+							printf("none:");
+							break;
+						case CRYPTO_DES_CBC:
+							printf("des_cbc:");
+							break;
+						case CRYPTO_3DES_CBC:
+							printf("3des_cbc:");
+							break;
+						case CRYPTO_BLOWFISH_CBC:
+							printf("blowfish_cbc:");
+							break;
+						case CRYPTO_CAST128_CBC:
+							printf("cast128_cbc:");
+							break;
+						case CRYPTO_DES_DERIV:
+							printf("des_deriv:");
+							break;
+						case CRYPTO_3DES_DERIV:
+							printf("3des_deriv:");
+							break;
+						case CRYPTO_RIJNDAEL_CBC:
+							printf("rinjndael_cbc:");
+							break;
+						case CRYPTO_TWOFISH_CBC:
+							printf("twofish_cbc:");
+							break;
+						case CRYPTO_AES_CTR:
+							printf("aes_ctr:");
+							break;
+						case CRYPTO_CAMELLIA_CBC:
+							printf("camellia_cbc:");
+							break;
+					}
+				}
+				void auth_algorithm_dump(uint8_t auth_algorithm) {
+					switch(auth_algorithm) {
+						case AUTH_NONE:
+							printf("none:");
+							break;
+						case AUTH_HMAC_MD5:
+							printf("hmac_md5:");
+							break;
+						case AUTH_HMAC_SHA1:
+							printf("hmac_sha1:");
+							break;
+						case AUTH_KEYED_MD5:
+							printf("keyed_md5:");
+							break;
+						case AUTH_KEYED_SHA1:
+							printf("keyed_sha1:");
+							break;
+						case AUTH_HMAC_SHA256:
+							printf("hmac_sha256:");
+							break;
+						case AUTH_HMAC_SHA384:
+							printf("hmac_sha384:");
+							break;
+						case AUTH_HMAC_SHA512:
+							printf("hmac_sha512:");
+							break;
+						case AUTH_HMAC_RIPEMD160:
+							printf("hmac_ripemd160:");
+							break;
+						case AUTH_AES_XCBC_MAC:
+							printf("aes_xcbc_mac:");
+							break;
+						case AUTH_TCP_MD5:
+							printf("tcp_md5:");
+							break;
+					}
+				}
+				void key_dump(uint64_t* key, uint16_t key_length) {
+					int index = key_length;
+					uint8_t* _key = (uint8_t*)key;
+					index--;
+					for(; index >= 0; index--) {
+						if(*(_key + index) != 0)
+							break;
+					}
+
+					printf("0x");
+
+					for(; index >= 0; index--) {
+						printf("%02x", *(_key + index));
+					}
+				}
+				void protocol_dump(uint8_t protocol) {
+					switch(protocol) {
+						case IP_PROTOCOL_ESP:
+							printf("esp\t");
+							break;
+						case IP_PROTOCOL_AH:
+							printf("ah\t");
+							break;
+					}
+				}
+
+				NetworkInterface* ni = ni_get(ni_index);
+				if(!ni)
+					return;
+
+				Map* sad = sad_get(ni);
+				if(!sad)
+					return;
+
+				MapIterator iter;
+				map_iterator_init(&iter, sad);
+				while(map_iterator_has_next(&iter)) {
+					MapEntry* entry = map_iterator_next(&iter);
+					List* dest_list = entry->data;
+					ListIterator _iter;
+					list_iterator_init(&_iter, dest_list);
+					while(list_iterator_has_next(&_iter)) {
+						SA* sa = list_iterator_next(&_iter);
+						printf("eth%d\t", ni_index);
+						protocol_dump(sa->ipsec_protocol);
+						printf("\t");
+						if(sa->ipsec_protocol == IP_PROTOCOL_ESP) {
+							crypto_algorithm_dump(((SA_ESP*)sa)->crypto_algorithm);
+							key_dump(((SA_ESP*)sa)->crypto_key, ((SA_ESP*)sa)->crypto_key_length);
+							printf("\t");
+							auth_algorithm_dump(((SA_ESP*)sa)->auth_algorithm);
+							key_dump(((SA_ESP*)sa)->auth_key, ((SA_ESP*)sa)->auth_key_length);
+							printf("\t");
+						} else {
+							auth_algorithm_dump(((SA_AH*)sa)->auth_algorithm);
+							key_dump(((SA_AH*)sa)->auth_key, ((SA_AH*)sa)->auth_key_length);
+							printf("\t");
+						}
+						printf("\n");
+					}
+				}
 			}
 
-			Map* sad = sad_get(ni);
-			MapIterator iter;
-			map_iterator_init(&iter, sad);
-			int index = 0;
-			printf("Index\tSA");
-			while(map_iterator_has_next(&iter)) {
-				MapEntry* entry = map_iterator_next(&iter);
-				SA* sa = entry->data;
-				printf("%d\t%p\n", index++, sa);
+			i++;
+			if(argc == 2) {
+				uint16_t count = ni_count();
+				for(int i = 0; i < count; i++) {
+					dump_sad(i);
+				}
+			} else {
+				if(strncmp(argv[i], "eth", 3)) {
+					printf("Netowrk Interface number wrong\n");
+					return -2;
+				}
+				if(!is_uint16(argv[i] + 3)) {
+					printf("Netowrk Interface number wrong\n");
+					return -2;
+				}
+
+				uint16_t ni_index = parse_uint16(argv[i] + 3);
+				dump_sad(ni_index);
 			}
 			return 0;
 		} else {
@@ -431,6 +752,8 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 			uint8_t action = ACTION_BYPASS;
 			uint8_t index = 0;
 
+			NetworkInterface* out_ni = NULL;
+
 			i++;
 			for(; i < argc; i++) {
 				if(!strcmp(argv[i], "-p")) { //protocol
@@ -449,33 +772,43 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 					i++;
 					if(!parse_addr_mask_port(argv[i], &src_ip, &src_mask, &src_port)) {
 						printf("Wrong source parameter\n");
-						return false;
+						return i;
 					}
 				} else if(!strcmp(argv[i], "-d")) {
 					i++;
 					if(!parse_addr_mask_port(argv[i], &dest_ip, &dest_mask, &dest_port)) {
 						printf("Wrong destination parameter\n");
-						return false;
+						return i;
 					}
 				} else if(!strcmp(argv[i], "-a")) {
 					i++;
-					if(!strcmp(argv[i], "ipsec")) {
+					char* _argv = argv[i];
+					if(!strncmp(_argv, "ipsec", 5)) {
+						_argv += 5;
 						action = ACTION_IPSEC;
-					} else if(!strcmp(argv[i], "bypass")) {
+					} else if(!strncmp(_argv, "bypass", 6)) {
+						_argv += 6;
 						action = ACTION_BYPASS;
 					} else {
 						printf("Invalid action\n");
 						return i;
 					}
-					i++;
 
-					if(!strcmp(argv[i], "in")) {
-						direction = DIRECTION_IN;
-					} else if(!strcmp(argv[i], "out")) {
-						direction = DIRECTION_OUT;
-					} else {
+					if(*_argv != '/' && *_argv != '\0') {
 						printf("Invalid direction\n");
 						return i;
+					}
+
+					if(*_argv == '/') {
+						_argv++;
+						if(!strcmp(_argv, "in")) {
+							direction = DIRECTION_IN;
+						} else if(!strcmp(_argv, "out")) {
+							direction = DIRECTION_OUT;
+						} else {
+							printf("Invalid direction\n");
+							return i;
+						}
 					}
 				} else if(!strcmp(argv[i], "-i")) {
 					i++;
@@ -486,12 +819,19 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 
 					index = parse_uint8(argv[i]);
 				} else if(!strcmp(argv[i], "-o")) {
+					i++;
+					out_ni = parse_ni(argv[i]);
+					if(!out_ni) {
+						printf("Can'nt found Out Network Interface\n");
+						return i;
+					}
 				} else {
 					printf("Invalid Value\n");
 					return i;
 				}
 			}
 
+			//check null
 			uint64_t attrs[] = {
 				SP_PROTOCOL, protocol,
 				SP_IS_PROTOCOL_SA_SHARE, is_protocol_sa_share,
@@ -502,7 +842,7 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 				SP_SOURCE_PORT, src_port,
 				SP_IS_SOURCE_PORT_SA_SHARE, is_src_port_sa_share,
 
-				SP_OUT_NI, 
+				SP_OUT_NI, (uint64_t)out_ni,
 				SP_DESTINATION_IP, dest_ip,
 				SP_IS_DESTINATION_IP_SA_SHARE, is_dest_ip_sa_share,
 				SP_DESTINATION_NET_MASK, dest_mask,
@@ -525,81 +865,88 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 				return -1;
 			}
 
+			printf("Security Policy added\n");
 			return 0;
 		} else if(!strcmp(argv[1], "remove")) {
- //			i++;
- //			NetworkInterface* ni = parse_ni(argv[i]);
- //			if(!ni) {
- //				printf("Netowrk Interface number wrong\n");
- //				return -2;
- //			}
- //
- //			i++;
- //			for(; i < argc; i++) {
- //				if(!strcmp(argv[i], "index:")) {
- //					i++;
- //					if(!is_uint8(argv[i])) {
- //						printf("index is must be uint8\n");
- //						return i;
- //					}
- //
- //					index = parse_uint32(argv[i]);
- //				} else {
- //					printf("Invalid Value\n");
- //					return i;
- //				}
- //			}
- //
- //			if(!spd_sp_delete(index))
- //				return -1;
- //
+			//Not yet
 			return 0;
 		} else if(!strcmp(argv[1], "list")) {
-			i++;
-			NetworkInterface* ni = parse_ni(argv[i]);
-			if(!ni) {
-				printf("Netowrk Interface number wrong\n");
-				return -2;
-			}
+			printf("NI\tProtocol\tSource/Mask:Port\tDestination/Mask:Port\n");
+			int parse_mask(uint32_t mask) {
+				int i = 0;
+				int bit = 0;
+				while(mask ^ bit) {
+					i++;
+					if(bit == 0)
+						bit = 1 << 31;
+					else
+						bit = bit >> 1;
+				}
 
-			List* spd = spd_get(ni);
-			if(!spd) {
-				printf("SPD not exist\n");
 				return i;
 			}
 
-			printf("Index\tProtocol\tSource\tDestination\t");
-			int index = 0;
-			ListIterator iter;
-			list_iterator_init(&iter, spd);
-			while(list_iterator_has_next(&iter)) {
-				SP* sp = list_iterator_next(&iter);
-				void protocol_dump(uint8_t protocol) {
-					switch(protocol) {
-						case IP_PROTOCOL_ANY:
-							printf("any");
-							break;
-						case IP_PROTOCOL_ICMP:
-							printf("icmp");
-							break;
-						case IP_PROTOCOL_IP:
-							printf("ip");
-							break;
-						case IP_PROTOCOL_TCP:
-							printf("tcp");
-							break;
-						case IP_PROTOCOL_UDP:
-							printf("udp");
-							break;
-					}
+			void dump_spd(uint16_t ni_index) {
+				NetworkInterface* ni = ni_get(ni_index);
+				if(!ni)
+					return;
+
+				List* spd = spd_get(ni);
+				if(!spd) {
+					return;
 				}
-				printf("%d\t", index++);
-				protocol_dump(sp->protocol);
-				printf("\t");
-				printf("%x/%x:%d", sp->src_ip, sp->src_mask, sp->src_port);
-				printf("%x/%x:%d", sp->dest_ip, sp->dest_mask, sp->dest_port);
-				printf("\n");
+
+				ListIterator iter;
+				list_iterator_init(&iter, spd);
+				while(list_iterator_has_next(&iter)) {
+					SP* sp = list_iterator_next(&iter);
+					void protocol_dump(uint8_t protocol) {
+						switch(protocol) {
+							case IP_PROTOCOL_ANY:
+								printf("any");
+								break;
+							case IP_PROTOCOL_ICMP:
+								printf("icmp");
+								break;
+							case IP_PROTOCOL_IP:
+								printf("ip");
+								break;
+							case IP_PROTOCOL_TCP:
+								printf("tcp");
+								break;
+							case IP_PROTOCOL_UDP:
+								printf("udp");
+								break;
+						}
+					}
+					printf("eth%d\t", ni_index);
+					protocol_dump(sp->protocol);
+					printf("\t\t");
+					printf("%x/%d:%d\t", sp->src_ip, parse_mask(sp->src_mask), sp->src_port);
+					printf("%x/%d:%d", sp->dest_ip, parse_mask(sp->dest_mask), sp->dest_port);
+					printf("\n");
+				}
 			}
+			i++;
+			uint16_t count = ni_count();
+			if(argc == 2) {
+				for(int i = 0; i < count; i++) {
+					dump_spd(i);
+				}
+			} else {
+				if(strncmp(argv[i], "eth", 3)) {
+					printf("Netowrk Interface number wrong\n");
+					return -2;
+				}
+				if(!is_uint16(argv[i] + 3)) {
+					printf("Netowrk Interface number wrong\n");
+					return -2;
+				}
+
+				uint16_t ni_index = parse_uint16(argv[i] + 3);
+				dump_spd(ni_index);
+			}
+
 			return 0;
 		} else {
 			printf("Invalid Command\n");
@@ -675,77 +1022,77 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 						printf("Invalid mode\n");
 						return i;
 					}
-				} else if(!strcmp(argv[i], "crypto:")) {
+				} else if(!strcmp(argv[i], "-E")) {
 					i++;
 
-					for(; i < argc; i++) {
-						if(!strcmp(argv[i], "algorithm:")) {
-							i++;
-							if(!strcmp(argv[i], "DES_CBC")) {
-								crypto_algorithm = CRYPTO_DES_CBC;
-							} else if(!strcmp(argv[i], "3DES_CBC")) {
-								crypto_algorithm = CRYPTO_3DES_CBC;
-							} else if(!strcmp(argv[i], "BLOWFISH_CBC")) {
-								crypto_algorithm = CRYPTO_BLOWFISH_CBC;
-							} else if(!strcmp(argv[i], "CAST128_CBC")) {
-								crypto_algorithm = CRYPTO_CAST128_CBC;
-							} else if(!strcmp(argv[i], "DES_DERIV")) {
-								crypto_algorithm = CRYPTO_DES_DERIV;
-							} else if(!strcmp(argv[i], "3DES_DERIV")) {
-								crypto_algorithm = CRYPTO_3DES_DERIV;
-							} else if(!strcmp(argv[i], "RIJNDAEL_CBC")) {
-								crypto_algorithm = CRYPTO_RIJNDAEL_CBC;
-							} else if(!strcmp(argv[i], "TWOFISH_CBC")) {
-								crypto_algorithm = CRYPTO_TWOFISH_CBC;
-							} else if(!strcmp(argv[i], "AES_CTR")) {
-								crypto_algorithm = CRYPTO_AES_CTR;
-							} else if(!strcmp(argv[i], "CAMELLIA_CBC")) {
-								crypto_algorithm = CRYPTO_CAMELLIA_CBC;
-							} else {
-								printf("Invalid crypto algorithm");
-								return i;
-							}
-						} else {
-							i--;
-							break;
-						}
+					protocol = IP_PROTOCOL_ESP;
+					if(!strcmp(argv[i], "des_cbc")) {
+						crypto_algorithm = CRYPTO_DES_CBC;
+					} else if(!strcmp(argv[i], "3des_cbc")) {
+						crypto_algorithm = CRYPTO_3DES_CBC;
+					} else if(!strcmp(argv[i], "blowfish_cbc")) {
+						crypto_algorithm = CRYPTO_BLOWFISH_CBC;
+					} else if(!strcmp(argv[i], "cast128_cbc")) {
+						crypto_algorithm = CRYPTO_CAST128_CBC;
+					} else if(!strcmp(argv[i], "rijndael_cbc")) {
+						crypto_algorithm = CRYPTO_RIJNDAEL_CBC;
+					} else if(!strcmp(argv[i], "aes_ctr")) {
+						crypto_algorithm = CRYPTO_AES_CTR;
+					} else if(!strcmp(argv[i], "camellia_cbc")) {
+						crypto_algorithm = CRYPTO_CAMELLIA_CBC;
+					} else if(!strcmp(argv[i], "twofish_cbc")) {
+						//crypto_algorithm = CRYPTO_TWOFISH_CBC;
+						printf("Not yet support\n");
+						return -i;
+					} else if(!strcmp(argv[i], "des_deriv")) {
+						//crypto_algorithm = CRYPTO_DES_DERIV;
+						printf("Not yet support\n");
+						return -i;
+					} else if(!strcmp(argv[i], "3des_deriv")) {
+						//crypto_algorithm = CRYPTO_3DES_DERIV;
+						printf("Not yet support\n");
+						return -i;
+					} else {
+						printf("Invalid crypto algorithm");
+						return i;
 					}
-				} else if(!strcmp(argv[i], "auth:")) {
+				} else if(!strcmp(argv[i], "-A")) {
 					i++;
 
-					for(; i < argc; i++) {
-						if(!strcmp(argv[i], "algorithm:")) {
-							i++;
-							if(!strcmp(argv[i], "HMAC_MD5")) {
-								auth_algorithm = AUTH_HMAC_MD5;
-							} else if(!strcmp(argv[i], "HMAC_SHA1")) {
-								auth_algorithm = AUTH_HMAC_SHA1;
-							} else if(!strcmp(argv[i], "KEYED_MD5")) {
-								auth_algorithm = AUTH_KEYED_MD5;
-							} else if(!strcmp(argv[i], "KEYED_SHA1")) {
-								auth_algorithm = AUTH_KEYED_SHA1;
-							} else if(!strcmp(argv[i], "HMAC_SHA256")) {
-								auth_algorithm = AUTH_HMAC_SHA256;
-							} else if(!strcmp(argv[i], "HMAC_SHA384")) {
-								auth_algorithm = AUTH_HMAC_SHA384;
-							} else if(!strcmp(argv[i], "HMAC_SHA512")) {
-								auth_algorithm = AUTH_HMAC_SHA512;
-							} else if(!strcmp(argv[i], "HMAC_SHA384")) {
-								auth_algorithm = AUTH_HMAC_SHA384;
-							} else if(!strcmp(argv[i], "AES_XCBC_MAC")) {
-								auth_algorithm = AUTH_AES_XCBC_MAC;
-							} else if(!strcmp(argv[i], "TCP_MD5")) {
-								auth_algorithm = AUTH_TCP_MD5;
-							} else {
-								printf("Invalid auth algorithm");
-								return i;
-							}
-						} else {
-							i--;
-							break;
-						}
+					protocol = IP_PROTOCOL_AH;
+					if(!strcmp(argv[i], "hmac_md5")) {
+						auth_algorithm = AUTH_HMAC_MD5;
+					} else if(!strcmp(argv[i], "hmac_sha1")) {
+						auth_algorithm = AUTH_HMAC_SHA1;
+					} else if(!strcmp(argv[i], "hmac_sha256")) {
+						auth_algorithm = AUTH_HMAC_SHA256;
+					} else if(!strcmp(argv[i], "hmac_sha384")) {
+						auth_algorithm = AUTH_HMAC_SHA384;
+					} else if(!strcmp(argv[i], "hmac_sha512")) {
+						auth_algorithm = AUTH_HMAC_SHA512;
+					} else if(!strcmp(argv[i], "hmac_ripemd160")) {
+						auth_algorithm = AUTH_HMAC_RIPEMD160;
+					} else if(!strcmp(argv[i], "keyed_md5")) {
+						//auth_algorithm = AUTH_KEYED_MD5;
+						printf("Not yet support\n");
+						return -i;
+					} else if(!strcmp(argv[i], "keyed_sha1")) {
+						//auth_algorithm = AUTH_KEYED_SHA1;
+						printf("Not yet support\n");
+						return -i;
+					} else if(!strcmp(argv[i], "aes_xcbc_mac")) {
+						//auth_algorithm = AUTH_AES_XCBC_MAC;
+						printf("Not yet support\n");
+						return -i;
+					} else if(!strcmp(argv[i], "tcp_md5")) {
+						//auth_algorithm = AUTH_TCP_MD5;
+						printf("Not yet support\n");
+						return -i;
+					} else {
+						printf("Invalid auth algorithm");
+						return i;
 					}
-				} else if(!strcmp(argv[i], "priority:")) {
+				} else if(!strcmp(argv[i], "-i")) {
 					i++;
 
 					if(!is_uint8(argv[i])) {
@@ -755,7 +1102,6 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 
 					priority = parse_uint8(argv[i]);
 				} else {
-					printf("%s: ", argv[i]);
 					printf("Invalid Value\n");
 					return i;
 				}

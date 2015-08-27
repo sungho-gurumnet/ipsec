@@ -40,8 +40,9 @@
 		ipsec -- IPSec action
 		bypass -- Bypass action
 		default action = bypass
-		in -- in direction
-		out -- out direction
+		out -- out bound
+		in -- in bound
+		default direction = out
 
 	-i index
 		Index of entry.
@@ -83,6 +84,10 @@
 		keyed_sha1 -- not yet support
 		aes_xcbc_mac -- not yet support
 		tcp_md5 -- not yet support
+
+	-i index
+		Index of entry.
+		default index = 0
 
 ####Manage security association
 	sa -- Manage SA(Security Association) entries.

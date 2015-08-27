@@ -129,22 +129,60 @@ Content* sp_remove_content(SP* sp, int index) {
 bool sp_add_sa(SP* sp, SA* sa, uint8_t direction) {
 	switch(direction) {
 		case DIRECTION_IN:
+			if(!sp->sa_inbound) {
+				sp->sa_inbound = list_create(sp->ni->pool);
+			}
+			if(!sp->sa_inbound)
+				return false;
+
 			return list_add(sp->sa_inbound, sa);
 		case DIRECTION_OUT:
+			if(!sp->sa_outbound) {
+				sp->sa_outbound = list_create(sp->ni->pool);
+			}
+			if(!sp->sa_outbound)
+				return false;
+
 			return list_add(sp->sa_outbound, sa);
- //		case INOUT:
- //			//TODO
- //			break;
 	}
 
 	return false;
 }
 
-bool sp_remove_sa(SP* sp, SA* sa) {
-	//TODO
-	return true;
-}
+bool sp_remove_sa(SP* sp, SA* sa, uint8_t direction) {
+	switch(direction) {
+		case DIRECTION_IN:
+			if(!sp->sa_inbound)
+				return false;
 
+			if(!list_remove_data(sp->sa_inbound, sa)) {
+				return false;
+			}
+
+			if(list_is_empty(sp->sa_inbound)) {
+				list_destroy(sp->sa_inbound);
+				sp->sa_inbound = NULL;
+			}
+
+			return true;
+		case DIRECTION_OUT:
+			if(!sp->sa_outbound)
+				return false;
+
+			if(!list_remove_data(sp->sa_outbound, sa)) {
+				return false;
+			}
+
+			if(list_is_empty(sp->sa_outbound)) {
+				list_destroy(sp->sa_outbound);
+				sp->sa_outbound = NULL;
+			}
+
+			return true;
+	}
+
+	return false;
+}
 //TODO
 SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 	ListIterator iter;
@@ -168,7 +206,7 @@ SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct) {
 		} else {
 			protocol = ip->protocol;
 		}
-		if(protocol != sa->protocol)
+		if(protocol != sa->ipsec_protocol)
 			continue;
 
 		uint32_t src_ip;

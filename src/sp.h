@@ -87,6 +87,6 @@ bool sp_free(SP* sp);
 bool sp_add_content(SP* sp, Content* content, int priority);
 Content* sp_remove_content(SP* sp, int index);
 bool sp_add_sa(SP* sp, SA* sa, uint8_t direction);
-bool sp_remove_sa(SP* sp, SA* sa);
+bool sp_remove_sa(SP* sp, SA* sa, uint8_t direction);
 SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct);
 #endif /* __sp_H__ */

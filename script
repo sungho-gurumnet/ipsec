@@ -4,20 +4,20 @@ upload $vmid main
 start $vmid
 
 #Manage IP
-stdin $vmid 0 "ip add 0 192.168.100.200"
-stdin $vmid 0 "ip add 1 192.168.100.201"
+stdin $vmid 0 "ip add eth0 192.168.100.210"
+stdin $vmid 0 "ip add eth0 192.168.100.211"
 
 #Manage SP
-stdin $vmid 0 "spd add -i 0 -s 192.168.100.0/24 -p -t 8080 -o eth1 direction: INOUT action: ipsec priority: 0"
-stdin $vmid 0 "spd add src: ip: 0 mask: 0 port: 0 dst: ip: 0 mask: 0 port: 0 direction: INOUT action: BYPASS protocol: IP_PROTOCOL_ANY priority: 9"
-#stdin $vmid 0 "spd add src: ip: 0xc0a80a65 mask: 0xffffff00 port: 7 dst: ip: 0xc0a80a0f mask: 0xffffff00 port: 7 direction: INOUT action: IPSEC protocol: IP_PROTOCOL_ANY priority: 0"
+stdin $vmid 0 "sp add eth0 -p tcp -s 192.168.100.0/24:0 -d 192.168.101.1/32:80 -a ipsec/out -i 0 -o eth1"
+stdin $vmid 0 "sp add eth0 -p any -s 0.0.0.0/24:0 -d -0.0.0.0/32:0 -a bypass/out -i 1 -o eth1"
 
 #Manage Content
-stdin $vmid 0 "content add index: 0 protocol: AH mode: TRANSPORT auth: algorithm: HMAC_MD5 priority: 0"
-stdin $vmid 0 "content add index: 0 protocol: ESP mode: TUNNEL src_ip: 0xc0a80a0a dst_ip: 0xc0a80a01 crypto: algorithm: DES_CBC auth: algorithm: HMAC_MD5 priority: 0"
+stdin $vmid 0 "content add eth0 0 -m transport -E des_cbc -A hmac_md5 -i 0"
+stdin $vmid 0 "content add eth0 0 -m tunnel 10.0.0.1-10.0.0.10 -E des_cbc -A hmac_md5 -i 0"
 
 #Manage SA
-stdin $vmid 0 "sad add src_ip: 0xc0a864c8 dst_ip: 0xc0a80a0a protocol: ESP spi: 0xeaeaeaea extensions: 0 crypto: algorithm: DES_CBC key: 0 key: 1 key: 2 auth: algorithm: HMAC_MD5 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0"
-stdin $vmid 0 "sad add src_ip: 0xc0a864c8 dst_ip: 0xc0a8640a protocol: AH spi: 0xeaeaeaea extensions: 0 crypto: algorithm: DES_CBC key: 0 key: 0 key: 0 auth: algorithm: HMAC_MD5 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0 key: 0"
-stdin $vmid 0 "spd dump"
-stdin $vmid 0 "sad dump"
+stdin $vmid 0 "sa add eth0 -s 192.168.100.0/24:0 -d 192.168.101.1/32:80 -E blowfish_cbc 0x165434ffcf0f0909001144 0 -A hmac_md5 0xf11 0"
+stdin $vmid 0 "sa add eth0 -s 192.168.100.0/24:0 -d 192.168.101.1/32:80 -A hmac_md5 0xf11 0"
+stdin $vmid 0 "sa add eth0 -s 192.168.100.0/24:0 -d 192.168.101.1/32:80"
+stdin $vmid 0 "sp list"
+stdin $vmid 0 "sa list"

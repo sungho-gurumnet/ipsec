@@ -4,6 +4,7 @@
 #include <net/ip.h>
 #include <net/tcp.h>
 #include <net/checksum.h>
+#include <util/event.h>
 
 #include "esp.h"
 #include "ah.h"
@@ -59,7 +60,7 @@ static bool ipsec_decrypt(Packet* packet, SA* sa) {
 	
 	// 5. ESP Header & Trailer Deletion
 	ESP_T* esp_trailer = (ESP_T*)(&esp->body[size-2]);
-	if(sa->mode == CONTENT_MODE_TRANSPORT) {
+	if(sa->ipsec_protocol_mode == CONTENT_MODE_TRANSPORT) {
 		ip->protocol = esp_trailer->next_hdr;
 		ip->ttl--;
  //		if(sa->iv_mode) {
@@ -67,7 +68,7 @@ static bool ipsec_decrypt(Packet* packet, SA* sa) {
  //		} else {
  //			transport_unset(packet, ESP_HEADER_LEN, 0);
  //		}
-	} else if(sa->mode == CONTENT_MODE_TUNNEL) {
+	} else if(sa->ipsec_protocol_mode == CONTENT_MODE_TUNNEL) {
  //		if(sa->iv_mode) {
 			tunnel_unset(packet, ESP_HEADER_LEN, ICV_LEN);
  //		} else {
@@ -323,7 +324,7 @@ static bool outbound_process(Packet* packet) {
 	Socket* socket = NULL;
 	SP* sp = NULL;
 	SA* sa = NULL;
-	if(ip->protocol == IP_PROTOCOL_TCP) { //if protocol is tcp use socket pointer 
+	if(ip->protocol == IP_PROTOCOL_TCP) { //tcp use socket pointer 
 		TCP* tcp = (TCP*)ip->body;
 		socket = socket_get(ni, endian32(ip->source), endian16(tcp->source));
 		if(socket) {
@@ -332,6 +333,11 @@ static bool outbound_process(Packet* packet) {
 			sa = socket->sa;
 			if(tcp->fin) {
 				socket->fin = true;
+				bool delete_socket(void* context) {
+					//delete socket
+					return false;
+				}
+				event_timer_add(delete_socket, socket, 5000000, 5000000);
 				//socket free
 				//TODO timer event
 				//socket_delete(endian32(ip->source), endian16(tcp->source));
@@ -343,10 +349,8 @@ static bool outbound_process(Packet* packet) {
 	if(!sp)
 		sp = spd_get_sp(packet->ni, ip);
 
-	if(!sp) {
-		//printf(" 1. SPD Lookup : No Policy ip\n");
+	if(!sp)
 		return false;
-	}
 
 tcp_packet:
 	if(sp->action == ACTION_BYPASS) {
@@ -358,27 +362,44 @@ tcp_packet:
 		
 		//set dmac
 		ni_output(sp->out_ni, packet);
-		return 0;	
+		return true;
 	}
 
 	ListIterator iter;
 	list_iterator_init(&iter, sp->contents);
 	while(list_iterator_has_next(&iter)) {
 		Content* content = list_iterator_next(&iter);
-		if(sa == NULL) {
-			if((sa = sp_get_sa(sp, content, ip, OUT)) == NULL) {
-				if((sa = ike_sa_get(ip, content)) == NULL) {
-					printf(" 2. SAD check : Discard ip\n");
-					return false;
-				}
+		if(!sa) {
+			//get sa from list of sp
+			sa = sp_get_sa(sp, content, ip, OUT);
 
-				if(ip->protocol == IP_PROTOCOL_TCP) {
-					TCP* tcp = (TCP*)ip->body;
-					Socket* socket = socket_create(ni, sp, sa);
-					socket_add(ni, endian32(ip->source), endian16(tcp->source), socket);
-				}
+			if(ip->protocol == IP_PROTOCOL_TCP) {
+				TCP* tcp = (TCP*)ip->body;
+				Socket* socket = socket_create(ni, sp, sa);
+				socket_add(ni, endian32(ip->source), endian16(tcp->source), socket);
 			}
 		}
+
+		if(!sa) {
+			//get sa from sad
+			if(ip->protocol == IP_PROTOCOL_TCP) {
+				TCP* tcp = (TCP*)ip->body;
+				Socket* socket = socket_create(ni, sp, sa);
+				socket_add(ni, endian32(ip->source), endian16(tcp->source), socket);
+			}
+		}
+
+		if(!sa) {
+			sa = ike_sa_get(ip, content); //this function not work;
+			if(ip->protocol == IP_PROTOCOL_TCP) {
+				TCP* tcp = (TCP*)ip->body;
+				Socket* socket = socket_create(ni, sp, sa);
+				socket_add(ni, endian32(ip->source), endian16(tcp->source), socket);
+			}
+		}
+
+		if(!sa)
+			return false;
 		// 2. SAD Lookup
 		switch(content->protocol) {
 			case IP_PROTOCOL_ESP:
@@ -389,8 +410,9 @@ tcp_packet:
 				ipsec_auth(packet, content, sa);
 				break;
 		}
-		sa = NULL;
+		sa = sa->next;
 	}
+
 	ni_output(sp->out_ni, packet);
 
 	return true;
