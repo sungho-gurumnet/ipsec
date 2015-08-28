@@ -5,13 +5,10 @@
 #include "crypto.h"
 #include "auth.h"
 // Mode
-#define CONTENT_MODE_TRANSPORT 		0x01
-#define CONTENT_MODE_TUNNEL 		0x02
 
 typedef enum {
 	NONE,
-	CONTENT_PROTOCOL,
-	CONTENT_MODE,
+	CONTENT_IPSEC_MODE,
 	CONTENT_TUNNEL_SOURCE_ADDR,
 	CONTENT_TUNNEL_DESTINATION_ADDR,
 	CONTENT_CRYPTO_ALGORITHM,
@@ -20,8 +17,8 @@ typedef enum {
 
 typedef struct _Content{
 	NetworkInterface* ni;
-	uint8_t protocol;
-	uint8_t mode;
+	uint8_t ipsec_protocol;//rename ipsec_protocol
+	uint8_t ipsec_mode; //rename ipsec_mode
 } Content;
 
 typedef struct _Content_AH_Transport {

@@ -2,6 +2,7 @@
 #define __IKE_H__
 #include <net/ip.h>
 #include <stdbool.h>
+#include "sp.h"
 #include "content.h"
 
 typedef struct _IKE {
@@ -10,6 +11,6 @@ typedef struct _IKE {
 } IKE;
 
 bool ike_init();
-SA* ike_sa_get(IP* ip, Content* con);
+SA* ike_sa_get(IP* ip, SP* sp);
 
 #endif

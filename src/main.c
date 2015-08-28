@@ -50,6 +50,89 @@ void destroy() {
 void gdestroy() {
 }
 
+static void dump_addr(uint32_t addr) {
+	printf("%d.%d.%d.%d", (addr >> 24) & 0xff,
+			(addr >> 16) & 0xff,
+			(addr >> 8) & 0xff,
+			addr & 0xff);
+}
+
+static void crypto_algorithm_dump(uint8_t crypto_algorithm) {
+	switch(crypto_algorithm) {
+		case CRYPTO_NONE:
+			printf("none");
+			break;
+		case CRYPTO_DES_CBC:
+			printf("des_cbc");
+			break;
+		case CRYPTO_3DES_CBC:
+			printf("3des_cbc");
+			break;
+		case CRYPTO_BLOWFISH_CBC:
+			printf("blowfish_cbc");
+			break;
+		case CRYPTO_CAST128_CBC:
+			printf("cast128_cbc");
+			break;
+		case CRYPTO_DES_DERIV:
+			printf("des_deriv");
+			break;
+		case CRYPTO_3DES_DERIV:
+			printf("3des_deriv");
+			break;
+		case CRYPTO_RIJNDAEL_CBC:
+			printf("rinjndael_cbc");
+			break;
+		case CRYPTO_TWOFISH_CBC:
+			printf("twofish_cbc");
+			break;
+		case CRYPTO_AES_CTR:
+			printf("aes_ctr");
+			break;
+		case CRYPTO_CAMELLIA_CBC:
+			printf("camellia_cbc");
+			break;
+	}
+}
+
+static void auth_algorithm_dump(uint8_t auth_algorithm) {
+	switch(auth_algorithm) {
+		case AUTH_NONE:
+			printf("none");
+			break;
+		case AUTH_HMAC_MD5:
+			printf("hmac_md5");
+			break;
+		case AUTH_HMAC_SHA1:
+			printf("hmac_sha1");
+			break;
+		case AUTH_KEYED_MD5:
+			printf("keyed_md5");
+			break;
+		case AUTH_KEYED_SHA1:
+			printf("keyed_sha1");
+			break;
+		case AUTH_HMAC_SHA256:
+			printf("hmac_sha256");
+			break;
+		case AUTH_HMAC_SHA384:
+			printf("hmac_sha384");
+			break;
+		case AUTH_HMAC_SHA512:
+			printf("hmac_sha512");
+			break;
+		case AUTH_HMAC_RIPEMD160:
+			printf("hmac_ripemd160");
+			break;
+		case AUTH_AES_XCBC_MAC:
+			printf("aes_xcbc_mac");
+			break;
+		case AUTH_TCP_MD5:
+			printf("tcp_md5");
+			break;
+	}
+}
+
 static uint32_t str_to_addr(char* argv) {
 	char* str = argv;
 	uint32_t address = (strtol(str, &str, 0) & 0xff) << 24; str++;
@@ -194,6 +277,8 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				printf("Can'nt found Network Interface\n");
 			}
 
+			uint32_t ipsec_mode = IPSEC_MODE_TRANSPORT;
+			uint32_t spi = 0;
 			uint8_t protocol = IP_PROTOCOL_ANY;
 			uint32_t src_ip = 0;
 			uint32_t src_mask = 0xffffffff;
@@ -201,7 +286,6 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 			uint32_t dest_ip = 0;
 			uint32_t dest_mask = 0xffffffff;
 			uint16_t dest_port = 0;
-			uint32_t spi = 0;
 
 			uint8_t crypto_algorithm = 0;
 			uint64_t* crypto_key = NULL;
@@ -212,7 +296,17 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 
 			i++;
 			for(; i < argc; i++) {
-				if(!strcmp(argv[i], "-p")) {
+				if(!strcmp(argv[i], "-m")) {
+					i++;
+					if(!strcmp(argv[i], "transport")) {
+						ipsec_mode = IPSEC_MODE_TRANSPORT;
+					} else if(!strcmp(argv[i], "tunnel")) {
+						ipsec_mode = IPSEC_MODE_TUNNEL;
+					} else {
+						printf("Invalid mode\n");
+						return i;
+					}
+				} else if(!strcmp(argv[i], "-p")) {
 					i++;
 					if(!strcmp(argv[i], "tcp")) {
 						protocol = IP_PROTOCOL_TCP;
@@ -470,6 +564,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 			}
 			uint64_t attrs[] = {
 				SA_SPI, spi,
+				SA_IPSEC_MODE, ipsec_mode,
 				SA_PROTOCOL, protocol,
 				SA_SOURCE_IP, src_ip,
 				SA_SOURCE_MASK, src_mask,
@@ -560,80 +655,17 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 		} else if(!strcmp(argv[i], "list")) {
 			printf("NI\tProtocol\tAlgorithm:Key\n");
 			void dump_sad(uint16_t ni_index) {
-				void crypto_algorithm_dump(uint8_t crypto_algorithm) {
-					switch(crypto_algorithm) {
-						case CRYPTO_NONE:
-							printf("none:");
+				void dump_ipsec_mode(uint8_t ipsec_mode) {
+					switch(ipsec_mode) {
+						case IPSEC_MODE_TUNNEL:
+							printf("tunnel\t");
 							break;
-						case CRYPTO_DES_CBC:
-							printf("des_cbc:");
-							break;
-						case CRYPTO_3DES_CBC:
-							printf("3des_cbc:");
-							break;
-						case CRYPTO_BLOWFISH_CBC:
-							printf("blowfish_cbc:");
-							break;
-						case CRYPTO_CAST128_CBC:
-							printf("cast128_cbc:");
-							break;
-						case CRYPTO_DES_DERIV:
-							printf("des_deriv:");
-							break;
-						case CRYPTO_3DES_DERIV:
-							printf("3des_deriv:");
-							break;
-						case CRYPTO_RIJNDAEL_CBC:
-							printf("rinjndael_cbc:");
-							break;
-						case CRYPTO_TWOFISH_CBC:
-							printf("twofish_cbc:");
-							break;
-						case CRYPTO_AES_CTR:
-							printf("aes_ctr:");
-							break;
-						case CRYPTO_CAMELLIA_CBC:
-							printf("camellia_cbc:");
+						case IPSEC_MODE_TRANSPORT:
+							printf("transport");
 							break;
 					}
 				}
-				void auth_algorithm_dump(uint8_t auth_algorithm) {
-					switch(auth_algorithm) {
-						case AUTH_NONE:
-							printf("none:");
-							break;
-						case AUTH_HMAC_MD5:
-							printf("hmac_md5:");
-							break;
-						case AUTH_HMAC_SHA1:
-							printf("hmac_sha1:");
-							break;
-						case AUTH_KEYED_MD5:
-							printf("keyed_md5:");
-							break;
-						case AUTH_KEYED_SHA1:
-							printf("keyed_sha1:");
-							break;
-						case AUTH_HMAC_SHA256:
-							printf("hmac_sha256:");
-							break;
-						case AUTH_HMAC_SHA384:
-							printf("hmac_sha384:");
-							break;
-						case AUTH_HMAC_SHA512:
-							printf("hmac_sha512:");
-							break;
-						case AUTH_HMAC_RIPEMD160:
-							printf("hmac_ripemd160:");
-							break;
-						case AUTH_AES_XCBC_MAC:
-							printf("aes_xcbc_mac:");
-							break;
-						case AUTH_TCP_MD5:
-							printf("tcp_md5:");
-							break;
-					}
-				}
+
 				void key_dump(uint64_t* key, uint16_t key_length) {
 					int index = key_length;
 					uint8_t* _key = (uint8_t*)key;
@@ -649,7 +681,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						printf("%02x", *(_key + index));
 					}
 				}
-				void protocol_dump(uint8_t protocol) {
+				void dump_ipsec_protocol(uint8_t protocol) {
 					switch(protocol) {
 						case IP_PROTOCOL_ESP:
 							printf("esp\t");
@@ -678,17 +710,22 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 					while(list_iterator_has_next(&_iter)) {
 						SA* sa = list_iterator_next(&_iter);
 						printf("eth%d\t", ni_index);
-						protocol_dump(sa->ipsec_protocol);
+						dump_ipsec_mode(sa->ipsec_mode);
+						printf("\t");
+						dump_ipsec_protocol(sa->ipsec_protocol);
 						printf("\t");
 						if(sa->ipsec_protocol == IP_PROTOCOL_ESP) {
 							crypto_algorithm_dump(((SA_ESP*)sa)->crypto_algorithm);
+							printf(":");
 							key_dump(((SA_ESP*)sa)->crypto_key, ((SA_ESP*)sa)->crypto_key_length);
 							printf("\t");
 							auth_algorithm_dump(((SA_ESP*)sa)->auth_algorithm);
+							printf(":");
 							key_dump(((SA_ESP*)sa)->auth_key, ((SA_ESP*)sa)->auth_key_length);
 							printf("\t");
 						} else {
 							auth_algorithm_dump(((SA_AH*)sa)->auth_algorithm);
+							printf(":");
 							key_dump(((SA_AH*)sa)->auth_key, ((SA_AH*)sa)->auth_key_length);
 							printf("\t");
 						}
@@ -749,7 +786,7 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 			bool is_dest_port_sa_share = true;
 
 			uint8_t direction = DIRECTION_IN;
-			uint8_t action = ACTION_BYPASS;
+			uint8_t ipsec_action = IPSEC_ACTION_BYPASS;
 			uint8_t index = 0;
 
 			NetworkInterface* out_ni = NULL;
@@ -785,10 +822,10 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 					char* _argv = argv[i];
 					if(!strncmp(_argv, "ipsec", 5)) {
 						_argv += 5;
-						action = ACTION_IPSEC;
+						ipsec_action = IPSEC_ACTION_IPSEC;
 					} else if(!strncmp(_argv, "bypass", 6)) {
 						_argv += 6;
-						action = ACTION_BYPASS;
+						ipsec_action = IPSEC_ACTION_BYPASS;
 					} else {
 						printf("Invalid action\n");
 						return i;
@@ -849,7 +886,7 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 				SP_DESTINATION_PORT, dest_port,
 				SP_IS_DESTINATION_PORT_SHARE, is_dest_port_sa_share,
 
-				SP_ACTION, action,
+				SP_IPSEC_ACTION, ipsec_action,
 				SP_DIRECTION, direction,
 
 				SP_NONE,
@@ -871,7 +908,37 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 			//Not yet
 			return 0;
 		} else if(!strcmp(argv[1], "list")) {
-			printf("NI\tProtocol\tSource/Mask:Port\tDestination/Mask:Port\n");
+			printf("NI\tAction/Direction\tProtocol\tSource/Mask:Port\tDestination/Mask:Port\n");
+			void dump_ipsec_action(uint8_t ipsec_action) {
+				switch(ipsec_action) {
+					case IPSEC_ACTION_BYPASS:
+						printf("bypass");
+						break;
+					case IPSEC_ACTION_IPSEC:
+						printf("ipsec");
+						break;
+				}
+			}
+
+			void dump_ni(NetworkInterface* ni) {
+				uint16_t count = ni_count();
+				for(int i = 0; i < count; i++) {
+					if(ni == ni_get(i))
+						printf("eth%d", i);
+				}
+			}
+
+			void dump_direction(uint8_t direction) {
+				switch(direction) {
+					case DIRECTION_IN:
+						printf("in");
+						break;
+					case DIRECTION_OUT:
+						printf("out");
+						break;
+				}
+			}
+
 			int parse_mask(uint32_t mask) {
 				int i = 0;
 				int bit = 0;
@@ -884,6 +951,28 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 				}
 
 				return i;
+			}
+
+			void dump_ipsec_mode(uint8_t ipsec_mode) {
+				switch(ipsec_mode) {
+					case IPSEC_MODE_TUNNEL:
+						printf("tunnel");
+						break;
+					case IPSEC_MODE_TRANSPORT:
+						printf("transport");
+						break;
+				}
+			}
+
+			void dump_ipsec_protocol(uint8_t protocol) {
+				switch(protocol) {
+					case IP_PROTOCOL_ESP:
+						printf("esp");
+						break;
+					case IP_PROTOCOL_AH:
+						printf("ah");
+						break;
+				}
 			}
 
 			void dump_spd(uint16_t ni_index) {
@@ -900,7 +989,7 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 				list_iterator_init(&iter, spd);
 				while(list_iterator_has_next(&iter)) {
 					SP* sp = list_iterator_next(&iter);
-					void protocol_dump(uint8_t protocol) {
+					void dump_protocol(uint8_t protocol) {
 						switch(protocol) {
 							case IP_PROTOCOL_ANY:
 								printf("any");
@@ -919,12 +1008,72 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 								break;
 						}
 					}
-					printf("eth%d\t", ni_index);
-					protocol_dump(sp->protocol);
+					printf("eth%d -> ", ni_index);
+					dump_ni(sp->out_ni);
+					printf("\t");
+					dump_ipsec_action(sp->ipsec_action);
+					printf("/");
+					dump_direction(sp->direction);
+					printf("\t");
+					dump_protocol(sp->protocol);
 					printf("\t\t");
-					printf("%x/%d:%d\t", sp->src_ip, parse_mask(sp->src_mask), sp->src_port);
-					printf("%x/%d:%d", sp->dest_ip, parse_mask(sp->dest_mask), sp->dest_port);
+					dump_addr(sp->src_ip);
+					printf("/");
+					printf("%d:%d\t", parse_mask(sp->src_mask), sp->src_port);
+					dump_addr(sp->dest_ip);
+					printf("/");
+					printf("%d:%d", parse_mask(sp->dest_mask), sp->dest_port);
 					printf("\n");
+
+					if(!sp->contents)
+						continue;
+
+					/*Content dump*/
+					ListIterator _iter;
+					list_iterator_init(&_iter, sp->contents);
+					while(list_iterator_has_next(&_iter)) {
+						printf("\t* ");
+						Content* content = list_iterator_next(&_iter);
+						dump_ipsec_protocol(content->ipsec_protocol);
+						printf(":");
+						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+							if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+								crypto_algorithm_dump(((Content_ESP_Transport*)content)->crypto_algorithm);
+								printf("/");
+								auth_algorithm_dump(((Content_ESP_Transport*)content)->auth_algorithm);
+							} else {
+								crypto_algorithm_dump(((Content_ESP_Tunnel*)content)->crypto_algorithm);
+								printf("/");
+								auth_algorithm_dump(((Content_ESP_Tunnel*)content)->auth_algorithm);
+							}
+						} else {
+							if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+								auth_algorithm_dump(((Content_AH_Transport*)content)->auth_algorithm);
+
+							} else {
+								auth_algorithm_dump(((Content_AH_Tunnel*)content)->auth_algorithm);
+							}
+						}
+						printf("\t");
+						dump_ipsec_mode(content->ipsec_mode);
+						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+							if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+								printf(":");
+								dump_addr(((Content_ESP_Tunnel*)content)->t_src_ip);
+								printf("-");
+								dump_addr(((Content_ESP_Tunnel*)content)->t_dest_ip);
+							}
+						} else {
+							if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+								printf(":");
+
+								dump_addr(((Content_AH_Tunnel*)content)->t_src_ip);
+								printf("-");
+								dump_addr(((Content_AH_Tunnel*)content)->t_dest_ip);
+							}
+						}
+						printf("\n");
+					}
 				}
 			}
 			i++;
@@ -972,8 +1121,12 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 				printf("Can'nt found Security Policy\n");
 				return i;
 			}
+			if(sp->ipsec_action == IPSEC_ACTION_BYPASS) {
+				printf("This policy is bypass\n");
+				return i;
+			}
+
 			i++;
-			uint8_t protocol = 0;
 			uint8_t mode = 0;
 			uint32_t src_ip = 0;
 			uint32_t dest_ip = 0;
@@ -982,25 +1135,14 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 			uint8_t priority = 0;
 			
 			for(; i < argc; i++) {
-				if(!strcmp(argv[i], "-p")) {
-					i++;
-
-					if(!strcmp(argv[i], "esp")) {
-						protocol = IP_PROTOCOL_ESP;
-					} else if(!strcmp(argv[i], "ah")) {
-						protocol = IP_PROTOCOL_AH;
-					} else {
-						printf("Invalid protocol\n");
-						return i;
-					}
-				} else if(!strcmp(argv[i], "-m")) {
+				if(!strcmp(argv[i], "-m")) {
 					i++;
 
 					if(!strcmp(argv[i], "transport")) {
-						mode = CONTENT_MODE_TRANSPORT;
+						mode = IPSEC_MODE_TRANSPORT;
 
 					} else if(!strcmp(argv[i], "tunnel")) {
-						mode = CONTENT_MODE_TUNNEL;
+						mode = IPSEC_MODE_TUNNEL;
 						i++;
 
 						char* next = argv[i];
@@ -1025,7 +1167,6 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 				} else if(!strcmp(argv[i], "-E")) {
 					i++;
 
-					protocol = IP_PROTOCOL_ESP;
 					if(!strcmp(argv[i], "des_cbc")) {
 						crypto_algorithm = CRYPTO_DES_CBC;
 					} else if(!strcmp(argv[i], "3des_cbc")) {
@@ -1059,7 +1200,6 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 				} else if(!strcmp(argv[i], "-A")) {
 					i++;
 
-					protocol = IP_PROTOCOL_AH;
 					if(!strcmp(argv[i], "hmac_md5")) {
 						auth_algorithm = AUTH_HMAC_MD5;
 					} else if(!strcmp(argv[i], "hmac_sha1")) {
@@ -1108,8 +1248,7 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 			}
 
 			uint64_t attrs[] = {
-				CONTENT_PROTOCOL, protocol,
-				CONTENT_MODE, mode,
+				CONTENT_IPSEC_MODE, mode,
 				CONTENT_TUNNEL_SOURCE_ADDR, src_ip,
 				CONTENT_TUNNEL_DESTINATION_ADDR, dest_ip,
 				CONTENT_CRYPTO_ALGORITHM, crypto_algorithm,
@@ -1221,8 +1360,10 @@ int main(int argc, char** argv) {
 				if(!packet)
 					continue;
 
-				if(!ipsec_process(packet))
+				if(!ipsec_process(packet)) {
+					printf("here!!!\n");
 					ni_free(packet);
+				}
 			}
 		}
 

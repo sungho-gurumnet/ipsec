@@ -18,9 +18,8 @@
 
 typedef enum {
 	SA_NONE,
+	SA_IPSEC_MODE,
 	SA_SPI,
-
-	SA_IPSEC_PROTOCOL,
 	SA_PROTOCOL,
 	SA_SOURCE_IP,
 	SA_SOURCE_MASK,
@@ -42,9 +41,8 @@ typedef enum {
 
 typedef struct _SA {
 	NetworkInterface* ni;
-	struct _SA* next;
 	uint8_t ipsec_protocol;
-	uint8_t ipsec_protocol_mode;
+	uint8_t ipsec_mode;
 	uint32_t spi;
 	uint32_t src_ip;
 	uint32_t src_mask;
@@ -55,6 +53,8 @@ typedef struct _SA {
 	uint8_t protocol; 
 	uint32_t lifetime; //not working
  	Window* window;
+
+	struct _SA* next;
 } SA;
 
 typedef struct _SA_ESP {

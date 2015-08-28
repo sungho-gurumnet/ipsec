@@ -67,10 +67,14 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 
 	for(int i = 0; attrs[i * 2] != SA_NONE; i++) {
 		switch(attrs[i * 2]) {
+			case SA_IPSEC_MODE:
+				sa->ipsec_mode = (uint8_t)attrs[i * 2 + 1];
+				break;
 			case SA_SPI:
+				sa->spi = (uint8_t)attrs[i * 2 + 1];
 				break;
 			case SA_PROTOCOL:
-				sa->protocol = (uint8_t)attrs[i* 2 + 1];
+				sa->protocol = (uint8_t)attrs[i * 2 + 1];
 				break;
 			case SA_SOURCE_IP:
 				sa->src_ip = (uint32_t)attrs[i * 2 + 1];
@@ -125,6 +129,7 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 
 						((SA_ESP*)sa)->encrypt_key = ks;
 						((SA_ESP*)sa)->decrypt_key = ks;
+						break;
 					case CRYPTO_3DES_CBC:
 						/*Des*/
 						;

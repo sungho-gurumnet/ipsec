@@ -55,10 +55,10 @@ SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
 			case IP_PROTOCOL_UDP:
 				;
 				UDP* udp = (UDP*)ip->body;
-				if(sp->src_port || (endian16(udp->source) != sp->src_port))
+				if(sp->src_port && (endian16(udp->source) != sp->src_port))
 					continue;
 
-				if(sp->dest_port || (endian16(udp->destination) != sp->dest_port))
+				if(sp->dest_port && (endian16(udp->destination) != sp->dest_port))
 					continue;
 
 				return sp;

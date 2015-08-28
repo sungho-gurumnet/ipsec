@@ -40,6 +40,7 @@ void sad_remove_all(NetworkInterface* ni) {
 		map_iterator_remove(&iter);
 	}
 	map_destroy(sad);
+	ni_config_remove(ni, SAD);
 }
 
 SA* sad_get_sa(NetworkInterface* ni, uint32_t spi, uint32_t dest_ip, uint8_t protocol) {
@@ -151,6 +152,11 @@ SA* sad_remove_sa(NetworkInterface* ni, uint32_t spi, uint32_t dest_ip, uint8_t 
 	if(list_is_empty(dest_list)) {
 		list_destroy(dest_list);
 		map_remove(sad, (void*)key);
+	}
+	
+	if(map_is_empty(sad)) {
+		map_destroy(sad);
+		ni_config_remove(ni, SAD);
 	}
 
 	return sa;

@@ -10,9 +10,6 @@
 #include "sa.h"
 #include "content.h"
 
-/* Action */
-#define ACTION_BYPASS		0x00
-#define ACTION_IPSEC		0x01
 /* protocol */
 #define IP_PROTOCOL_ANY         0x00
 /* in net/ip.h */
@@ -35,6 +32,7 @@
 typedef enum {
 	SP_NONE,
 	SP_DIRECTION,
+	SP_IPSEC_ACTION,
 
 	SP_PROTOCOL,
 	SP_IS_PROTOCOL_SA_SHARE,
@@ -50,14 +48,13 @@ typedef enum {
 	SP_DESTINATION_NET_MASK,
 	SP_DESTINATION_PORT,
 	SP_IS_DESTINATION_PORT_SHARE,
-
-	SP_ACTION,
 } SP_ATTRIBUTES;
 
 typedef struct _SP{
 	NetworkInterface* ni;
 	NetworkInterface* out_ni;
 	uint8_t direction;
+	uint8_t ipsec_action;
 
 	uint8_t protocol;
 	bool is_protocol_sa_share;
@@ -74,7 +71,6 @@ typedef struct _SP{
 	uint16_t dest_port;
 	bool is_dest_port_sa_share;
 
-	uint8_t action;
 
 	List* sa_inbound;
 	List* sa_outbound;
@@ -88,5 +84,6 @@ bool sp_add_content(SP* sp, Content* content, int priority);
 Content* sp_remove_content(SP* sp, int index);
 bool sp_add_sa(SP* sp, SA* sa, uint8_t direction);
 bool sp_remove_sa(SP* sp, SA* sa, uint8_t direction);
-SA* sp_get_sa(SP* sp, Content* cont, IP* ip, uint8_t direct);
+SA* sp_get_sa(SP* sp, IP* ip, uint8_t direct);
+SA* sp_find_sa(SP* sp, IP* ip);
 #endif /* __sp_H__ */
