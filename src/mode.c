@@ -68,6 +68,7 @@ bool tunnel_set(Packet* packet, uint16_t header_len, uint16_t tail_len) {
 		memmove(ip->body + header_len, ip, ip->length);
 
 		ip->length = endian16(endian16(ip->length) + header_len + tail_len);
+		packet->end += IP_LEN + header_len + tail_len;
 
 		return true;
 	} else {

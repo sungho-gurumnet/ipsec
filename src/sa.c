@@ -232,6 +232,7 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 						((SA_AH*)sa)->auth_key = (uint64_t*)attrs[i * 2 + 1];
 				} else {
 						((SA_ESP*)sa)->auth_key = (uint64_t*)attrs[i * 2 + 1];
+						printf(" here!!!!!!!!!!!!!!!!!! %p\n", attrs[i * 2 + 1]);
 				}
 				break;
 			case SA_AUTH_KEY_LENGTH:

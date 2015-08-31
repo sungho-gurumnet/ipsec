@@ -17,6 +17,7 @@
 
 bool ipsec_init() {
 	/*nothing*/
+	EVP_MD_CTX_init(EVP_MD_CTX_create());
 
 	return true;
 }
@@ -83,6 +84,7 @@ static bool ipsec_decrypt(Packet* packet, SA* sa) {
 static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;
+	printf("origin size: %d\n", endian16(ip->length));
 
 	int padding_len = (endian16(ip->length) - (ip->ihl * 4) + 2) % 8;
 	if(padding_len != 0)
@@ -90,7 +92,7 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 
 	if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
  //		if(sa->iv_mode) {
-			if(!transport_set(packet, ESP_HEADER_LEN, padding_len + ICV_LEN))
+			if(!transport_set(packet, ESP_HEADER_LEN, padding_len))
 				return false;
  //		} else  {
  //			if(!transport_set(packet, ESP_HEADER_LEN, padding_len))
@@ -98,7 +100,7 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
  //		}
 	} else if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
  //		if(sa->iv_mode) {
-			if(!tunnel_set(packet, ESP_HEADER_LEN, padding_len + ICV_LEN))
+			if(!tunnel_set(packet, ESP_HEADER_LEN, padding_len))
 				return false;
  //		} else {
  //			if(!transport_set(packet, ESP_HEADER_LEN, padding_len))
@@ -108,6 +110,7 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 
 	ether = (Ether*)(packet->buffer + packet->start);
         ip = (IP*)ether->payload;
+	printf("tunnel size %d\n", endian16(ip->length));
 	//Set ESP Trailer
 	ESP_T* esp_trailer = (ESP_T*)(ip->body + endian16(ip->length) + padding_len);
 	esp_trailer->pad_len = padding_len;
@@ -116,11 +119,15 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 	} else if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
 		esp_trailer->next_hdr = IP_PROTOCOL_IP;
 	}
-	ip->length = endian16(endian16(ip->length) + padding_len + ESP_TRAILER_LEN);
+	ip->length = endian16(endian16(ip->length) + ESP_TRAILER_LEN);
+	printf("tunnel size %d\n", endian16(ip->length));
+	packet->end += ESP_TRAILER_LEN;
 
+	printf("3\n");
 	ESP* esp = (ESP*)ip->body;
 	// 5. Seq# Validation
-	((Cryptography*)(((SA_ESP*)sa)->crypto))->encrypt(esp->body, endian16(ip->length) - ESP_HEADER_LEN, (SA_ESP*)sa);
+	((Cryptography*)(((SA_ESP*)sa)->crypto))->encrypt(esp->body, endian16(ip->length) - IP_LEN - ESP_HEADER_LEN, (SA_ESP*)sa);
+	printf("3.5\n");
 	esp->seq_num = endian32(++sa->window->seq_counter);
 	esp->spi = endian32(sa->spi);
 	
@@ -129,15 +136,20 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 
 	// 6. ICV Calculation
 	//if(sa->iv_mode == true) {
-	if(((SA_AH*)sa)->auth) {
-		int size = endian16(ip->length) - (ip->ihl * 4); 
-		unsigned char* result = &(ip->body[size]);
-		((Authentication*)(((SA_AH*)sa)->auth))->authenticate(&(ip->body), size, result, sa);
+	if(((SA_ESP*)sa)->auth) {
+		int size = endian16(ip->length) - IP_LEN;
+		//unsigned char* result = &(ip->body[size]);
+		printf("size: %d\n", size);
+		((Authentication*)(((SA_ESP*)sa)->auth))->authenticate(ip->body, size, ip->body + size, sa);
+		printf("3.5.2\n");
 		ip->length = endian16(endian16(ip->length) + ICV_LEN);
+		packet->end += ICV_LEN;
 	}
+	printf("3.6\n");
 
 	ip->protocol = IP_PROTOCOL_ESP;
 
+	printf("4\n");
 	switch(content->ipsec_mode) {
 		case IPSEC_MODE_TRANSPORT:
 			ip->ttl--;
@@ -320,7 +332,6 @@ static bool inbound_process(Packet* packet) {
 }
 
 static bool outbound_process(Packet* packet) {
-	printf("there\n");
 	NetworkInterface* ni = packet->ni;
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;

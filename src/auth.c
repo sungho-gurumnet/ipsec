@@ -1,15 +1,33 @@
 #include "auth.h"
 
 static void _hmac_md5(void* payload, size_t size, unsigned char* result, SA* sa) {
-	unsigned char* temp = (unsigned char*)malloc(16);
+	//unsigned char* temp = (unsigned char*)malloc(16);
+
+	char str[] = "asdfasdf";
 	uint64_t* auth_key = NULL;
+
 	if(sa->ipsec_protocol == IP_PROTOCOL_ESP) {
 		auth_key = ((SA_ESP*)sa)->auth_key;
 	} else if(sa->ipsec_protocol == IP_PROTOCOL_AH) {
 		auth_key = ((SA_AH*)sa)->auth_key;
 	}
-	temp = HMAC(EVP_md5(), auth_key, 16, payload, size , NULL, NULL);
-	memcpy(result, temp, 12);
+
+	printf("%x %x\n", *auth_key, *(auth_key + 1));
+ 	HMAC(EVP_md5(), auth_key, 16, (const unsigned char*)str, strlen(str) , NULL, NULL);
+	printf("here??\n");
+ //	uint64_t* auth_key = NULL;
+ //	unsigned char* digest;
+ //	if(sa->ipsec_protocol == IP_PROTOCOL_ESP) {
+ //		auth_key = ((SA_ESP*)sa)->auth_key;
+ //	} else if(sa->ipsec_protocol == IP_PROTOCOL_AH) {
+ //		auth_key = ((SA_AH*)sa)->auth_key;
+ //	}
+ //	printf("auth key %p\n", auth_key);
+ //	const EVP_MD* evp_md = EVP_md5();
+ //	printf("evp md: %p\n", evp_md);
+ //	digest = HMAC(evp_md, auth_key, 16, payload, size , NULL, NULL);
+ //	printf("here2 %p\n", digest);
+	//memcpy(result, temp, 12);
 }
 
 static void _hmac_sha1(void* payload, size_t size, unsigned char* result, SA* sa) {
