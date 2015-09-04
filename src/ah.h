@@ -1,7 +1,7 @@
 #ifndef __AH_H__
 #define __AH_H__
 
-#define AH_HEADER_LEN 	12
+#define AH_HEADER_LEN 	24
 
 typedef struct _AH{
 	uint8_t		next_hdr;

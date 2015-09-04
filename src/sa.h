@@ -19,6 +19,8 @@
 typedef enum {
 	SA_NONE,
 	SA_IPSEC_MODE,
+	SA_TUNNEL_SOURCE_IP,
+	SA_TUNNEL_DESTINATION_IP,
 	SA_SPI,
 	SA_PROTOCOL,
 	SA_SOURCE_IP,
@@ -43,6 +45,8 @@ typedef struct _SA {
 	NetworkInterface* ni;
 	uint8_t ipsec_protocol;
 	uint8_t ipsec_mode;
+	uint32_t t_src_ip;
+	uint32_t t_dest_ip;
 	uint32_t spi;
 	uint32_t src_ip;
 	uint32_t src_mask;

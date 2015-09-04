@@ -9,6 +9,7 @@
 bool transport_set(Packet* packet, uint16_t header_len, uint16_t tail_len) {
 	//check size
 	if(packet->start > header_len && (packet->end + tail_len) < packet->size) { 
+		printf("type3\n");
 		Ether* _ether = (Ether*)(packet->buffer + packet->start);
 		IP* _ip = (IP*)_ether->payload;
 		_ip->length = endian16(endian16(_ip->length) + header_len + tail_len);
@@ -20,6 +21,7 @@ bool transport_set(Packet* packet, uint16_t header_len, uint16_t tail_len) {
 
 		return true;
 	} else if(packet->end + header_len + tail_len < packet->size) {
+		printf("type4\n");
 		Ether* _ether = (Ether*)(packet->buffer + packet->start);
 		IP* _ip = (IP*)_ether->payload;
 		_ip->length = endian16(endian16(_ip->length) + header_len + tail_len);
@@ -54,12 +56,24 @@ bool tunnel_set(Packet* packet, uint16_t header_len, uint16_t tail_len) {
 	if((packet->start > (header_len + IP_LEN)) && (packet->end + tail_len) < packet->size) { 
 		Ether* _ether = (Ether*)(packet->buffer + packet->start);
 		IP* _ip = (IP*)_ether->payload;
+
+		unsigned char* padding = NULL;
 		packet->start -= (IP_LEN + header_len);
+		padding = packet->buffer + packet->end;
+		for(int i = 0; i < tail_len; i++) {
+			padding[i] = i + 1;
+		}
 		packet->end += tail_len;
 
 		Ether* ether = (Ether*)(packet->buffer + packet->start);
 		IP* ip = (IP*)ether->payload;
-		ip->length = endian16(endian16(_ip->length) + header_len + tail_len);
+		ip->ihl = _ip->ihl;
+		ip->version = _ip->version;
+		ip->ecn = _ip->ecn;
+		ip->dscp = _ip->dscp;
+		ip->length = endian16(endian16(_ip->length) + IP_LEN + header_len + tail_len);
+		ip->id = _ip->id;
+		ip->flags_offset = _ip->flags_offset;
 
 		return true;
 	} else if(packet->end + IP_LEN + header_len + tail_len < packet->size) {
@@ -67,7 +81,7 @@ bool tunnel_set(Packet* packet, uint16_t header_len, uint16_t tail_len) {
 		IP* ip = (IP*)ether->payload;
 		memmove(ip->body + header_len, ip, ip->length);
 
-		ip->length = endian16(endian16(ip->length) + header_len + tail_len);
+		ip->length = endian16(IP_LEN + endian16(ip->length) + header_len + tail_len);
 		packet->end += IP_LEN + header_len + tail_len;
 
 		return true;

@@ -12,7 +12,7 @@
 #include <net/ether.h>
 
 #include "sa.h"
-//#include "esp.h"
+#include "esp.h"
 
 #define CRYPTO_NONE			0x00
 #define CRYPTO_DES_CBC			0x01
@@ -27,8 +27,8 @@
 #define CRYPTO_CAMELLIA_CBC		0x10
 
 typedef struct _Cryptography{
-	void(*encrypt)(void* payload, size_t size, SA_ESP* sa);
-	void(*decrypt)(void* payload, size_t size, SA_ESP* sa);
+	void(*encrypt)(ESP* esp, size_t size, SA_ESP* sa);
+	void(*decrypt)(ESP* esp, size_t size, SA_ESP* sa);
 } Cryptography;
 
 Cryptography* get_cryptography(int algorithm);

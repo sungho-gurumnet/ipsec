@@ -210,73 +210,95 @@ SA* sp_get_sa(SP* sp, IP* ip, uint8_t direction) {
 		} else {
 			protocol = ip->protocol;
 		}
-		if(protocol != sa->ipsec_protocol)
+		if(protocol != sa->protocol)
 			continue;
 
-		uint32_t src_ip;
 		if(sp->is_src_ip_sa_share) {
-			src_ip = sp->src_ip;
-		} else {
-			src_ip = endian32(ip->source);
-		}
-		if(src_ip != sa->src_ip)
-			continue;
+			if(sp->src_mask != sa->src_mask) {
+				continue;
+			}
 
-		uint32_t dest_ip;
+			uint32_t src_ip = sp->src_ip;
+			if(!src_ip && ((src_ip & sp->src_mask) != (sa->src_ip & (sp->src_mask))))
+				continue;
+		} else {
+			if(sa->src_mask != 0xffffffff)
+				continue;
+
+			uint32_t src_ip = endian32(ip->source);
+			if(src_ip != sa->src_ip)
+				continue;
+		}
+
 		if(sp->is_dest_ip_sa_share) {
-			dest_ip = sp->dest_ip;
-		} else {
-			dest_ip = endian32(ip->destination);
-		}
-		if(dest_ip != sa->dest_ip)
-			continue;
+			if(sp->dest_mask != sa->dest_mask)
+				continue;
 
-		uint16_t src_port;
-		uint16_t dest_port;
+			uint32_t dest_ip = sp->dest_ip;
+			if(!dest_ip && ((dest_ip & sp->dest_mask) != (sa->dest_ip & (sp->dest_mask))))
+				continue;
+		} else {
+			if(sa->dest_mask != 0xffffffff)
+				continue;
+
+			uint32_t dest_ip = endian32(ip->destination);
+			if(dest_ip != sa->dest_ip)
+				continue;
+		}
+
 		switch(ip->protocol) {
 			case IP_PROTOCOL_TCP:
 				;
 				TCP* tcp = (TCP*)ip->body;
 				if(sp->is_src_port_sa_share) {
-					src_port = sp->src_port;
+					uint16_t src_port = sp->src_port;
+					if(src_port != sa->src_port)
+						continue;
 				} else {
-					src_port = endian16(tcp->source);
+					uint16_t src_port = endian16(tcp->source);
+					if(src_port != sa->src_port)
+						continue;
 				}
-				if(src_port != sa->src_port)
-					continue;
 
 				if(sp->is_dest_port_sa_share) {
-					dest_port = sp->dest_port;
+					uint16_t dest_port = sp->dest_port;
+					if(dest_port != sa->dest_port)
+						continue;
 				} else {
-					dest_port = endian16(tcp->destination);
+					uint16_t dest_port = endian16(tcp->destination);
+					if(dest_port != sa->dest_port)
+						continue;
 				}
-				if(dest_port != sa->dest_port)
-					continue;
 
 				return sa;
 			case IP_PROTOCOL_UDP:
 				;
 				UDP* udp = (UDP*)ip->body;
 				if(sp->is_src_port_sa_share) {
-					src_port = sp->src_port;
+					uint16_t src_port = sp->src_port;
+					if(src_port != sa->src_port)
+						continue;
 				} else {
-					src_port = endian16(udp->source);
+					uint16_t src_port = endian16(udp->source);
+					if(src_port != sa->src_port)
+						continue;
 				}
-				if(src_port != sa->src_port)
-					continue;
 
 				if(sp->is_dest_port_sa_share) {
-					dest_port = sp->dest_port;
+					uint16_t dest_port = sp->dest_port;
+					if(dest_port != sa->dest_port)
+						continue;
 				} else {
-					dest_port = endian16(udp->destination);
+					uint16_t dest_port = endian16(udp->destination);
+					if(dest_port != sa->dest_port)
+						continue;
 				}
-				if(dest_port != sa->dest_port)
-					continue;
 
 				return sa;
 			default:
-				continue;
+				return sa;
 		}
+
 	}
 
 	return NULL;
@@ -285,68 +307,54 @@ SA* sp_get_sa(SP* sp, IP* ip, uint8_t direction) {
 //return SA or SA Bundle
 SA* sp_find_sa(SP* sp, IP* ip) {
 	SA* first_sa = NULL;
+	SA* pre_sa = NULL;
+	Map* sad = sad_get(sp->ni);
+
+	if(!sp->contents)
+		return NULL;
+
+	if(!sad)
+		return NULL;
+
 	ListIterator iter;
 	list_iterator_init(&iter, sp->contents);
-	SA* pre_sa = NULL;
 	while(list_iterator_has_next(&iter)) {
-		Content* content = list_iterator_next(&iter);
-		Map* sad = sad_get(sp->ni);
-		MapIterator _iter;
-		map_iterator_init(&_iter, sad);
 		SA* next_sa = NULL;
-		while(map_iterator_has_next(&_iter)) {
-			MapEntry* entry = map_iterator_next(&_iter);
+		Content* content = list_iterator_next(&iter);
+
+		MapIterator sad_iter;
+		map_iterator_init(&sad_iter, sad);
+		while(map_iterator_has_next(&sad_iter)) {
+			MapEntry* entry = map_iterator_next(&sad_iter);
 			List* dest_list = entry->data;
+
 			ListIterator list_iter;
 			list_iterator_init(&list_iter, dest_list);
 			while(list_iterator_has_next(&list_iter)) {
 				SA* sa = list_iterator_next(&list_iter);
+				printf("0\n");
 				if(content->ipsec_protocol != sa->ipsec_protocol)
 					continue;
-				//mode
+
+				printf("1\n");
+				//mode check
 				if(content->ipsec_mode != sa->ipsec_mode)
 					continue;
 
+				printf("2\n");
 				//algorithm check
 				switch(content->ipsec_mode) {
 					case IPSEC_MODE_TRANSPORT:
 						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+							printf("2.1\n");
 							if(((Content_ESP_Transport*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm)
 								continue;
 
+							printf("2.2\n");
 							if(((Content_ESP_Transport*)content)->auth_algorithm != ((SA_ESP*)sa)->auth_algorithm)
 								continue;
 						} else {
 							if(((Content_AH_Transport*)content)->auth_algorithm != ((SA_AH*)sa)->auth_algorithm)
-								continue;
-						}
-
-						if(!first_sa) {
-							//TODO add protocol
-							if(sp->is_src_ip_sa_share) {
-								if(sp->src_ip != sa->src_ip || sp->src_mask != sa->src_mask)
-									continue;
-							} else {
-								uint32_t src_ip = endian32(ip->source);
-								if(src_ip != sa->src_ip || sa->src_mask != 0xffffffff)
-									continue;
-							}
-
-							if(sp->is_dest_ip_sa_share) {
-								if(sp->dest_ip != sa->dest_ip || sp->dest_mask != sa->dest_mask)
-									continue;
-							} else {
-								uint32_t dest_ip = endian32(ip->source);
-								if(dest_ip != sa->dest_ip || sa->dest_mask != 0xffffffff)
-									continue;
-							}
-
-							//TODO add port
-						} else {
-							if(pre_sa->src_ip != sa->src_ip || pre_sa->src_mask != sa->src_mask)
-								continue;
-
-							if(pre_sa->dest_ip != sa->dest_ip || pre_sa->dest_mask != sa->dest_mask)
 								continue;
 						}
 
@@ -356,15 +364,20 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						uint32_t t_src_ip;
 						uint32_t t_dest_ip;
 						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-							if(((Content_ESP_Tunnel*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm)
+							printf("2.3\n");
+							if(((Content_ESP_Tunnel*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm) {
+								printf("here?\n");
 								continue;
+							}
 
+							printf("2.4\n");
 							if(((Content_ESP_Tunnel*)content)->auth_algorithm != ((SA_ESP*)sa)->auth_algorithm)
 								continue;
 							
 							t_src_ip = ((Content_ESP_Tunnel*)content)->t_src_ip;
 							t_dest_ip = ((Content_ESP_Tunnel*)content)->t_dest_ip;
 						} else {
+							printf("2.5\n");
 							if(((Content_AH_Tunnel*)content)->auth_algorithm != ((SA_AH*)sa)->auth_algorithm)
 								continue;
 
@@ -373,18 +386,55 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						}
 						
 						//ip check
-						if(sa->src_ip != t_src_ip)
+						if(sa->t_src_ip != t_src_ip)
 							continue;
 
-						if(sa->dest_ip != t_dest_ip)
+						if(sa->t_dest_ip != t_dest_ip)
 							continue;
 						break;
 				}
+
+				printf("3\n");
+				//address check
+				if(!first_sa) {
+					printf("3.1");
+					//TODO add protocol
+					if(sp->is_src_ip_sa_share) {
+						if(sp->src_ip != sa->src_ip || sp->src_mask != sa->src_mask)
+							continue;
+					} else {
+						uint32_t src_ip = endian32(ip->source);
+						if(src_ip != sa->src_ip || sa->src_mask != 0xffffffff)
+							continue;
+					}
+					printf("3.2");
+
+					if(sp->is_dest_ip_sa_share) {
+						if(sp->dest_ip != sa->dest_ip || sp->dest_mask != sa->dest_mask)
+							continue;
+					} else {
+						uint32_t dest_ip = endian32(ip->source);
+						if(dest_ip != sa->dest_ip || sa->dest_mask != 0xffffffff)
+							continue;
+					}
+					printf("3.3");
+
+					//TODO add port
+				} else {
+					if(pre_sa->src_ip != sa->src_ip || pre_sa->src_mask != sa->src_mask)
+						continue;
+
+					if(pre_sa->dest_ip != sa->dest_ip || pre_sa->dest_mask != sa->dest_mask)
+						continue;
+				}
 				
+				printf("4\n");
 				next_sa = sa;
-				break;
+				goto next;
 			}
 		}
+
+next:
 		if(!next_sa) {
 			printf("Can'nt found SA\n");
 			return NULL;

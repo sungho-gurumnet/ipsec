@@ -8,6 +8,7 @@
 #include <openssl/des.h>
 #include <util/map.h>
 
+#include "ipsec.h"
 #include "sad.h"
 #include "sa.h"
 
@@ -45,23 +46,33 @@ void sad_remove_all(NetworkInterface* ni) {
 
 SA* sad_get_sa(NetworkInterface* ni, uint32_t spi, uint32_t dest_ip, uint8_t protocol) {
 	Map* sad = ni_config_get(ni, SAD);
-	if(!sad) {
-		printf("Can'nt found SA\n");
+	if(!sad)
 		return NULL;
+
+	uint64_t key = ((uint64_t)protocol << 32) | (uint64_t)spi;
+	List* dest_list = map_get(sad, (void*)key);
+	if(!dest_list)
+		return NULL;
+
+	bool compare(void* data, void* context) {
+		uint32_t dest_addr = (uint32_t)(uint64_t)data;
+		SA* sa = context;
+
+		if(sa->ipsec_mode == IPSEC_MODE_TUNNEL) {
+			if(dest_addr == sa->t_dest_ip)
+				return true;
+		} else {
+			if((dest_addr & sa->dest_mask) == (sa->dest_ip & sa->dest_mask))
+				return true;
+		}
+
+		return false;
 	}
 
-	uint64_t key = ((uint64_t)endian32(spi) << 32) | (uint64_t)dest_ip;
-	Map* protocol_map = map_get(sad, (void*)key);
-	if(protocol_map == NULL) {
-		printf("Can'nt found SA\n");
+	int index = list_index_of(dest_list, (void*)(uint64_t)dest_ip, compare);
+	SA* sa = (SA*)list_get(dest_list, index);
+	if(!sa)
 		return NULL;
-	}
-
-	SA* sa = map_get(protocol_map, (void*)(uint64_t)protocol);
-	if(!sa) {
-		printf("Can'nt found SA\n");
-		return NULL;
-	}
 
 	return sa;
 }

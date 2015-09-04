@@ -70,8 +70,14 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 			case SA_IPSEC_MODE:
 				sa->ipsec_mode = (uint8_t)attrs[i * 2 + 1];
 				break;
+			case SA_TUNNEL_SOURCE_IP:
+				sa->t_src_ip = (uint32_t)attrs[i * 2 + 1];
+				break;
+			case SA_TUNNEL_DESTINATION_IP:
+				sa->t_dest_ip = (uint32_t)attrs[i * 2 + 1];
+				break;
 			case SA_SPI:
-				sa->spi = (uint8_t)attrs[i * 2 + 1];
+				sa->spi = (uint32_t)attrs[i * 2 + 1];
 				break;
 			case SA_PROTOCOL:
 				sa->protocol = (uint8_t)attrs[i * 2 + 1];
@@ -113,7 +119,10 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 						;
 						/*Des*/
 						DES_cblock des_key;
-						memcpy(des_key, ((SA_ESP*)sa)->crypto_key, sizeof(DES_cblock));
+						uint64_t key = *(uint64_t*)(((SA_ESP*)sa)->crypto_key);
+						//key = endian64(key);
+						printf("key: %lx\n", key);
+						memcpy(des_key, &key, sizeof(DES_cblock));
 						DES_set_odd_parity(&des_key);
 
 						DES_key_schedule* ks = __malloc(sizeof(DES_key_schedule), ni->pool);
@@ -223,6 +232,9 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 						((SA_AH*)sa)->auth_algorithm = (uint8_t)attrs[i * 2 + 1];
 						((SA_AH*)sa)->auth = (void*)get_authentication(attrs[i * 2 + 1]);
 				} else {
+						if(!attrs[i * 2 + 1]) {
+							break;
+						}
 						((SA_ESP*)sa)->auth_algorithm = (uint8_t)attrs[i * 2 + 1];
 						((SA_ESP*)sa)->auth = (void*)get_authentication(attrs[i * 2 + 1]);
 				}
@@ -232,7 +244,6 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 						((SA_AH*)sa)->auth_key = (uint64_t*)attrs[i * 2 + 1];
 				} else {
 						((SA_ESP*)sa)->auth_key = (uint64_t*)attrs[i * 2 + 1];
-						printf(" here!!!!!!!!!!!!!!!!!! %p\n", attrs[i * 2 + 1]);
 				}
 				break;
 			case SA_AUTH_KEY_LENGTH:

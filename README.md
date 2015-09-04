@@ -10,6 +10,17 @@
 	add [interface][address]-- Allocate ip to network interface.
 	remove -- Free ip from network interface.
 
+####Manage network interface ip
+	route -- Manage ip of network interface interface.
+######SUB COMMANDS
+	add [interface][address]-- Allocate ip to network interface.
+	remove [interface][address]-- Free ip from network interface.
+######PARAMETERS
+	-g gateway
+	-m mask
+		Mas specification.
+		default 24
+
 ####Manage Security policy
 	sp -- Manages SPD(Security Policy Database) entries in interface.
 ######SUB COMMANDS
@@ -99,8 +110,10 @@
 ######PARAMETERS
 	-p Protocols
 		Protocol specification.
-		esp -- Encapsulating Security Payload.
-		ah -- Authentication Header.
+		any -- TCP & UDP
+		tcp -- TCP
+		udp -- UDP
+		default protocol = any
 
 	-s [address][/mask][:port]
 		Source specification.

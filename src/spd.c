@@ -30,6 +30,7 @@ SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
 	ListIterator iter;
 	list_iterator_init(&iter, spd);
 	
+	printf("spd_get_sp\n");
 	while(list_iterator_has_next(&iter)) {
 		SP* sp = list_iterator_next(&iter);
 		if(sp->protocol && (ip->protocol != sp->protocol))
@@ -61,10 +62,12 @@ SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
 				if(sp->dest_port && (endian16(udp->destination) != sp->dest_port))
 					continue;
 
+				printf("return\n");
 				return sp;
 
 			default:
-				continue;
+				printf("return\n");
+				return sp;
 		}
 	}
 	return NULL;

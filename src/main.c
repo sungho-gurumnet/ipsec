@@ -50,6 +50,40 @@ void destroy() {
 void gdestroy() {
 }
 
+static int parse_mask(uint32_t mask) {
+	int i = 0;
+	int bit = 0;
+	while(mask ^ bit) {
+		i++;
+		if(bit == 0)
+			bit = 1 << 31;
+		else
+			bit = bit >> 1;
+	}
+
+	return i;
+}
+
+static void dump_protocol(uint8_t protocol) {
+	switch(protocol) {
+		case IP_PROTOCOL_ANY:
+			printf("any");
+			break;
+		case IP_PROTOCOL_ICMP:
+			printf("icmp");
+			break;
+		case IP_PROTOCOL_IP:
+			printf("ip");
+			break;
+		case IP_PROTOCOL_TCP:
+			printf("tcp");
+			break;
+		case IP_PROTOCOL_UDP:
+			printf("udp");
+			break;
+	}
+}
+
 static void dump_addr(uint32_t addr) {
 	printf("%d.%d.%d.%d", (addr >> 24) & 0xff,
 			(addr >> 16) & 0xff,
@@ -133,14 +167,56 @@ static void auth_algorithm_dump(uint8_t auth_algorithm) {
 	}
 }
 
-static uint32_t str_to_addr(char* argv) {
-	char* str = argv;
-	uint32_t address = (strtol(str, &str, 0) & 0xff) << 24; str++;
-	address |= (strtol(str, &str, 0) & 0xff) << 16; str++;
-	address |= (strtol(str, &str, 0) & 0xff) << 8; str++;
-	address |= strtol(str, NULL, 0) & 0xff;
+static bool parse_addr(char* argv, uint32_t* address) {
+	char* next = NULL;
+	uint32_t temp;
+	temp = strtol(argv, &next, 0);
+	if(temp > 0xff)
+		return false;
 
-	return address;
+	*address = (temp & 0xff) << 24;
+	if(next == argv)
+		return false;
+	argv = next;
+
+	if(*argv != '.')
+		return false;
+	argv++;
+	temp = strtol(argv, &next, 0);
+	if(temp > 0xff)
+		return false;
+
+	*address |= (temp & 0xff) << 16;
+	if(next == argv)
+		return false;
+	argv = next;
+
+	if(*argv != '.')
+		return false;
+	argv++;
+	temp = strtol(argv, &next, 0);
+	if(temp > 0xff)
+		return false;
+	*address |= (temp & 0xff) << 8;
+	if(next == argv)
+		return false;
+	argv = next;
+
+	if(*argv != '.')
+		return false;
+	argv++;
+	temp = strtol(argv, &next, 0);
+	if(temp > 0xff)
+		return false;
+	*address |= temp & 0xff;
+	if(next == argv)
+		return false;
+	argv = next;
+
+	if(*argv != '\0')
+		return false;
+
+	return true;
 }
 
 static bool parse_key(NetworkInterface* ni, char* argv, uint64_t** key, uint16_t key_length) {
@@ -166,7 +242,7 @@ static bool parse_key(NetworkInterface* ni, char* argv, uint64_t** key, uint16_t
 	char buf[5];
 	strcpy(buf, "0x00");
 	for(int  i = 0; i < length; i++) {
-		memcpy(buf + 2, argv + strlen(argv) - (2 * (i + 1)), 2);
+		memcpy(buf + 2, argv + i * 2 + 2, 2);
 		uint8_t value = parse_uint8(buf);
 		*_key = value;
 		_key++;
@@ -174,7 +250,7 @@ static bool parse_key(NetworkInterface* ni, char* argv, uint64_t** key, uint16_t
 
 	if(!!((strlen(argv) - 2) % 2)) {
 		strcpy(buf, "0x0");
-		memcpy(buf + 2, argv + 2, 1);
+		memcpy(buf + 2, argv + strlen(argv) - 1, 1);
 		uint8_t value = parse_uint8(buf);
 		*_key = value;
 	}
@@ -240,23 +316,114 @@ static int cmd_ip(int argc, char** argv, void(*callback)(char* result, int exit_
 	}
 
 	if(!strcmp("add", argv[1])) {
+		if(argc != 4) {
+			printf("Wrong arguments\n");
+			return -2;
+		}
 		NetworkInterface* ni = parse_ni(argv[2]);
 		if(!ni) {
 			printf("Netowrk Interface number wrong\n");
 			return -2;
 		}
 
-		uint32_t addr = str_to_addr(argv[3]);
+		uint32_t addr = 0;
+		if(!parse_addr(argv[3], &addr))
+			return -3;
+
 		if(!ni_ip_add(ni, addr))
 			return -3;
 	} else if(!strcmp("remove", argv[1])) {
+		if(argc != 4) {
+			printf("Wrong arguments\n");
+			return -2;
+		}
 		NetworkInterface* ni = parse_ni(argv[2]);
 		if(!ni) {
 			printf("Netowrk Interface number wrong\n");
 			return -2;
 		}
 
-		uint32_t addr = str_to_addr(argv[3]);
+		uint32_t addr = 0;
+		if(!parse_addr(argv[3], &addr))
+			return -3;
+
+		if(!ni_ip_remove(ni, addr)) {
+			printf("Can'nt found address\n");
+			return -3;
+		}
+
+	} else
+		return -1;
+
+	return 0;
+}
+
+static int cmd_route(int argc, char** argv, void(*callback)(char* result, int exit_status)) {
+	if(argc == 1) {
+		//dump
+	}
+
+	if(!strcmp("add", argv[1])) {
+		NetworkInterface* ni = parse_ni(argv[2]);
+		if(!ni) {
+			printf("Netowrk Interface number wrong\n");
+			return -2;
+		}
+
+		uint32_t addr = 0;
+		if(!parse_addr(argv[3], &addr))
+			return -3;
+
+		IPv4Interface* interface = ni_ip_get(ni, addr);
+		if(!interface)
+			return -3;
+
+		uint32_t gw = 0;
+		uint8_t mask = 0xff;
+		for(int i = 4; i < argc; i++) {
+			if(strcmp(argv[i], "-g")) {
+				i++;
+				if(!parse_addr(argv[i], &addr)) {
+					return -i;
+				}
+				gw = addr;
+			} else if(strcmp(argv[i], "-m")) {
+				i++;
+				if(!is_uint8(argv[i])) {
+					return -i;
+				}
+
+				uint8_t size = parse_uint8(argv[i]);
+				if(size > 32)
+					return -i;
+
+				mask = parse_uint8(argv[i]);
+			}
+		}
+
+		interface->gateway = gw;
+		if(mask == 0xff) {
+			mask = 24;
+		}
+
+		interface->gateway = 0xffffffff;
+		interface->gateway = interface->gateway << (32 - mask);
+
+	} else if(!strcmp("remove", argv[1])) {
+		if(argc != 4) {
+			printf("Wrong arguments\n");
+			return -2;
+		}
+		NetworkInterface* ni = parse_ni(argv[2]);
+		if(!ni) {
+			printf("Netowrk Interface number wrong\n");
+			return -2;
+		}
+
+		uint32_t addr = 0;
+		if(!parse_addr(argv[3], &addr))
+			return -3;
+
 		if(!ni_ip_remove(ni, addr)) {
 			printf("Can'nt found address\n");
 			return -3;
@@ -278,6 +445,8 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 			}
 
 			uint32_t ipsec_mode = IPSEC_MODE_TRANSPORT;
+			uint32_t t_src_ip = 0;
+			uint32_t t_dest_ip = 0;
 			uint32_t spi = 0;
 			uint8_t protocol = IP_PROTOCOL_ANY;
 			uint32_t src_ip = 0;
@@ -302,6 +471,23 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						ipsec_mode = IPSEC_MODE_TRANSPORT;
 					} else if(!strcmp(argv[i], "tunnel")) {
 						ipsec_mode = IPSEC_MODE_TUNNEL;
+						i++;
+
+						char* next = argv[i];
+						t_src_ip = (strtol(next, &next, 0) & 0xff) << 24; next++;
+						t_src_ip |= (strtol(next, &next, 0) & 0xff) << 16; next++;
+						t_src_ip |= (strtol(next, &next, 0) & 0xff) << 8; next++;
+						t_src_ip |= strtol(next, &next, 0) & 0xff;
+
+						if(*next != '-') {
+							printf("Wrong parameter\n");
+							return i;
+						}
+						next++;
+						t_dest_ip = (strtol(next, &next, 0) & 0xff) << 24; next++;
+						t_dest_ip |= (strtol(next, &next, 0) & 0xff) << 16; next++;
+						t_dest_ip |= (strtol(next, &next, 0) & 0xff) << 8; next++;
+						t_dest_ip |= strtol(next, &next, 0) & 0xff;
 					} else {
 						printf("Invalid mode\n");
 						return i;
@@ -312,6 +498,8 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						protocol = IP_PROTOCOL_TCP;
 					} else if(!strcmp(argv[i], "udp")) {
 						protocol = IP_PROTOCOL_UDP;
+					} else if(!strcmp(argv[i], "icmp")) {
+						protocol = IP_PROTOCOL_ICMP;
 					} else if(!strcmp(argv[i], "any")){
 						protocol = IP_PROTOCOL_ANY;
 					} else 
@@ -328,6 +516,13 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						printf("Wrong destination parameter\n");
 						return false;
 					}
+				} else if(!strcmp(argv[i], "-spi")) {
+					i++;
+					if(!is_uint32(argv[i])) {
+						printf("Wrong spi\n");
+						return i;
+					}
+					spi = parse_uint32(argv[i]);
 				} else if(!strcmp(argv[i], "-E")) {
 					i++;
 
@@ -471,13 +666,6 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						printf("Invalid crypto algorithm");
 						return i;
 					}
-
-					i++;
-					if(!is_uint32(argv[i])) {
-						printf("Wrong spi\n");
-						return i;
-					}
-					spi = parse_uint32(argv[i]);
 				} else if(!strcmp(argv[i], "-A")) {
 					i++;
 
@@ -544,14 +732,6 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						printf("Invalid auth algorithm");
 						return i;
 					}
-
-					//TODO: case not esp
-					i++;
-					if(!is_uint32(argv[i])) {
-						printf("Wrong spi\n");
-						return i;
-					}
-					spi = parse_uint32(argv[i]);
 				} else {
 					printf("Invalid Value\n");
 					return i;
@@ -562,9 +742,12 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				printf("Algorithm not setted\n");
 				return i;
 			}
+			printf("\n\nspi: %d\n\n", spi);
 			uint64_t attrs[] = {
 				SA_SPI, spi,
 				SA_IPSEC_MODE, ipsec_mode,
+				SA_TUNNEL_SOURCE_IP, t_src_ip,
+				SA_TUNNEL_DESTINATION_IP, t_dest_ip,
 				SA_PROTOCOL, protocol,
 				SA_SOURCE_IP, src_ip,
 				SA_SOURCE_MASK, src_mask,
@@ -653,12 +836,12 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
  //
 			return 0;
 		} else if(!strcmp(argv[i], "list")) {
-			printf("NI\tProtocol\tAlgorithm:Key\n");
+			printf("********SAD********\n");
 			void dump_sad(uint16_t ni_index) {
 				void dump_ipsec_mode(uint8_t ipsec_mode) {
 					switch(ipsec_mode) {
 						case IPSEC_MODE_TUNNEL:
-							printf("tunnel\t");
+							printf("tunnel");
 							break;
 						case IPSEC_MODE_TRANSPORT:
 							printf("transport");
@@ -684,10 +867,10 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				void dump_ipsec_protocol(uint8_t protocol) {
 					switch(protocol) {
 						case IP_PROTOCOL_ESP:
-							printf("esp\t");
+							printf("esp");
 							break;
 						case IP_PROTOCOL_AH:
-							printf("ah\t");
+							printf("ah");
 							break;
 					}
 				}
@@ -710,25 +893,44 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 					while(list_iterator_has_next(&_iter)) {
 						SA* sa = list_iterator_next(&_iter);
 						printf("eth%d\t", ni_index);
+						printf("mode: ");
 						dump_ipsec_mode(sa->ipsec_mode);
-						printf("\t");
+						if(sa->ipsec_mode == IPSEC_MODE_TUNNEL) {
+							printf(" ");
+							dump_addr(sa->t_src_ip);
+							printf("-");
+							dump_addr(sa->t_dest_ip);
+						}
+						printf("\n\tprotocol: ");
 						dump_ipsec_protocol(sa->ipsec_protocol);
-						printf("\t");
+						printf("\n\tspi: 0x");
+						printf("%x", sa->spi);
+						printf("\n\t");
 						if(sa->ipsec_protocol == IP_PROTOCOL_ESP) {
 							crypto_algorithm_dump(((SA_ESP*)sa)->crypto_algorithm);
-							printf(":");
+							printf(": ");
 							key_dump(((SA_ESP*)sa)->crypto_key, ((SA_ESP*)sa)->crypto_key_length);
+							printf("\n");
 							printf("\t");
 							auth_algorithm_dump(((SA_ESP*)sa)->auth_algorithm);
-							printf(":");
+							printf(": ");
 							key_dump(((SA_ESP*)sa)->auth_key, ((SA_ESP*)sa)->auth_key_length);
-							printf("\t");
 						} else {
 							auth_algorithm_dump(((SA_AH*)sa)->auth_algorithm);
-							printf(":");
+							printf(": ");
 							key_dump(((SA_AH*)sa)->auth_key, ((SA_AH*)sa)->auth_key_length);
-							printf("\t");
 						}
+						printf("\n\tprotocol: ");
+						dump_protocol(sa->protocol);
+						printf("\n\tsource: ");
+						dump_addr(sa->src_ip);
+						printf("/");
+						printf("%d:%d\t", parse_mask(sa->src_mask), sa->src_port);
+						printf("\n\tdestination: ");
+						dump_addr(sa->dest_ip);
+						printf("/");
+						printf("%d:%d", parse_mask(sa->dest_mask), sa->dest_port);
+						printf("\n");
 						printf("\n");
 					}
 				}
@@ -801,6 +1003,8 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 						protocol = IP_PROTOCOL_TCP;
 					} else if(!strcmp(argv[i], "udp")) {
 						protocol = IP_PROTOCOL_UDP;
+					} else if(!strcmp(argv[i], "icmp")) {
+						protocol = IP_PROTOCOL_ICMP;
 					} else {
 						printf("Wrong protocol parameter\n");
 						return i;
@@ -908,6 +1112,7 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 			//Not yet
 			return 0;
 		} else if(!strcmp(argv[1], "list")) {
+			printf("********SPD********\n");
 			printf("NI\tAction/Direction\tProtocol\tSource/Mask:Port\tDestination/Mask:Port\n");
 			void dump_ipsec_action(uint8_t ipsec_action) {
 				switch(ipsec_action) {
@@ -937,20 +1142,6 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 						printf("out");
 						break;
 				}
-			}
-
-			int parse_mask(uint32_t mask) {
-				int i = 0;
-				int bit = 0;
-				while(mask ^ bit) {
-					i++;
-					if(bit == 0)
-						bit = 1 << 31;
-					else
-						bit = bit >> 1;
-				}
-
-				return i;
 			}
 
 			void dump_ipsec_mode(uint8_t ipsec_mode) {
@@ -989,25 +1180,6 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 				list_iterator_init(&iter, spd);
 				while(list_iterator_has_next(&iter)) {
 					SP* sp = list_iterator_next(&iter);
-					void dump_protocol(uint8_t protocol) {
-						switch(protocol) {
-							case IP_PROTOCOL_ANY:
-								printf("any");
-								break;
-							case IP_PROTOCOL_ICMP:
-								printf("icmp");
-								break;
-							case IP_PROTOCOL_IP:
-								printf("ip");
-								break;
-							case IP_PROTOCOL_TCP:
-								printf("tcp");
-								break;
-							case IP_PROTOCOL_UDP:
-								printf("udp");
-								break;
-						}
-					}
 					printf("eth%d -> ", ni_index);
 					dump_ni(sp->out_ni);
 					printf("\t");
@@ -1074,7 +1246,9 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 						}
 						printf("\n");
 					}
+					printf("\n");
 				}
+				printf("\n");
 			}
 			i++;
 			uint16_t count = ni_count();
@@ -1303,6 +1477,11 @@ Command commands[] = {
 		.func = cmd_ip
 	},
 	{
+		.name = "route",
+		.desc = "add or remove Gateway",
+		.func = cmd_route
+	},
+	{
 		.name = "sa",
 		.desc = "Manage IPSec Security Association Database\nadd get delete flush dump",
 		.func = cmd_sa
@@ -1361,7 +1540,6 @@ int main(int argc, char** argv) {
 					continue;
 
 				if(!ipsec_process(packet)) {
-					printf("here!!!\n");
 					ni_free(packet);
 				}
 			}
