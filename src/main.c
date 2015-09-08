@@ -35,13 +35,14 @@ bool ginit(int argc, char** argv) {
 	if(!ipsec_init()) {
 		return -1;
 	}
+
+	cmd_init();
+
 	return true;
 }
 
 void init(int argc, char** argv) {
 	is_continue  = true;
-
-	cmd_init();
 }
 
 void destroy() {
@@ -256,6 +257,14 @@ static bool parse_key(NetworkInterface* ni, char* argv, uint64_t** key, uint16_t
 	}
 
 	return true;
+}
+
+static void key_dump(uint64_t* _key, uint16_t key_length) {
+	uint8_t* key = (uint8_t*)_key;
+	printf("0x");
+	for(int i = 0; i < key_length; i++) {
+		printf("%x", *(key++)& 0xff);
+	}
 }
 
 static NetworkInterface* parse_ni(char* argv) {
@@ -849,21 +858,6 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 					}
 				}
 
-				void key_dump(uint64_t* key, uint16_t key_length) {
-					int index = key_length;
-					uint8_t* _key = (uint8_t*)key;
-					index--;
-					for(; index >= 0; index--) {
-						if(*(_key + index) != 0)
-							break;
-					}
-
-					printf("0x");
-
-					for(; index >= 0; index--) {
-						printf("%02x", *(_key + index));
-					}
-				}
 				void dump_ipsec_protocol(uint8_t protocol) {
 					switch(protocol) {
 						case IP_PROTOCOL_ESP:
@@ -1520,7 +1514,8 @@ Command commands[] = {
 
 int main(int argc, char** argv) {
 	printf("Thread %d bootting\n", thread_id());
-	if(thread_id() == 0) {
+	uint16_t id = thread_id();
+	if(id == 0) {
 		ginit(argc, argv);
 	}
 
@@ -1545,9 +1540,11 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		char* line = readline();
-		if(line != NULL) {
-			cmd_exec(line, NULL);
+		if(id == 0) {
+			char* line = readline();
+			if(line != NULL) {
+				cmd_exec(line, NULL);
+			}
 		}
 	}
 

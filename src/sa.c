@@ -3,6 +3,7 @@
 #include <_malloc.h>
 #undef DONT_MAKE_WRAPPER
 #include <net/ni.h>
+#include <lock.h>
 
 #include "sa.h"
 #include "auth.h"

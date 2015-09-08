@@ -15,9 +15,11 @@
 #include "ike.h"
 #include "mode.h"
 
+#define DEBUG	0
+
 bool ipsec_init() {
-	/*nothing*/
-	EVP_MD_CTX_init(EVP_MD_CTX_create());
+	printf("PacketNgin IPSec\n");
+	printf("Start\n");
 
 	return true;
 }
@@ -25,27 +27,24 @@ bool ipsec_init() {
 static bool ipsec_decrypt(Packet* packet, SA* sa) { 
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;
-	//int origin_length = endian16(ip->length);
 
 	// 2. Seq# Validation
 	ESP* esp = (ESP*)ip->body;
-	if(checkWindow(sa->window, esp->seq_num) < 0) {
-		printf(" 2. Seq# Validation : Dicard Packet \n");
-		return false;
-	}
+ //	if(checkWindow(sa->window, esp->seq_num) < 0) {
+ //#ifdef DEBUG
+ //		printf(" 2. Seq# Validation : Dicard Packet \n");
+ //#endif
+ //		return false;
+ //	}
 
-	int size = endian16(ip->length) - (ip->ihl * 4) - ICV_LEN; 
-	
-	if((size + ICV_LEN) > packet->end) {
-		printf(" 3. ICV Validation : Discard Packet \n");
-		return false;
-	}
-
+	int size = endian16(ip->length) - (ip->ihl * 4) - ICV_LEN;
 	uint8_t result[12];
 	if(((SA_ESP*)sa)->auth) {
 		((Authentication*)(((SA_ESP*)sa)->auth))->authenticate(&(ip->body), size, result, sa);
 		if(memcmp(result, ip->body + size, 12) != 0) {
+#if DEBUG
 			printf(" 3. ICV Validation : Discard Packet \n");
+#endif
 			return false;
 		}
 	}
@@ -97,7 +96,7 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 	ESP* esp = (ESP*)ip->body;
 	// 5. Seq# Validation
 	((Cryptography*)(((SA_ESP*)sa)->crypto))->encrypt(esp, endian16(ip->length) - IP_LEN - ESP_HEADER_LEN, (SA_ESP*)sa);
-	esp->seq_num = endian32(++sa->window->seq_counter);
+	esp->seq_num = window_get_seq_counter(sa->window);
 	esp->spi = endian32(sa->spi);
 	
 	if(((SA_ESP*)sa)->auth) {
@@ -124,7 +123,6 @@ static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
 			break;
 	}
 
-	printf("ipsec encrypt succes\n");
 	return true;
 }
 
@@ -241,12 +239,13 @@ static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
 			break;
 	}
 
-	printf("ipsec auth success\n");
 	return true;
 }
 
 static bool inbound_process(Packet* packet) {
+#if DEBUG
 	printf("inbound process\n");
+#endif
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;
 
@@ -261,10 +260,16 @@ static bool inbound_process(Packet* packet) {
 				ESP* esp = (ESP*)ip->body;
 				sa = sad_get_sa(packet->ni, endian32(esp->spi), endian32(ip->destination), ip->protocol);
 				if(!sa) {
-					printf(" 1. SAD Lookup : Discard ip \n");
-					return false;
+#if DEBUG
+					printf("Can'nt found SA\n");
+#endif
+					ni_free(packet);
+					return true;
 				}
-				ipsec_decrypt(packet, sa);
+				if(!ipsec_decrypt(packet, sa)) {
+					ni_free(packet);
+					return true;
+				}
 				break;
 
 			case IP_PROTOCOL_AH:
@@ -272,10 +277,15 @@ static bool inbound_process(Packet* packet) {
 				AH* ah = (AH*)ip->body;
 				sa = sad_get_sa(packet->ni, endian32(ah->spi), endian32(ip->destination), ip->protocol);
 				if(!sa) {
-					printf(" 1. SAD Lookup : Discard ip \n");
+#if DEBUG
+					printf("Can'nt found SA\n");
+#endif
 					return false;
 				}
-				ipsec_proof(packet, sa);
+				if(!ipsec_proof(packet, sa)) {
+					ni_free(packet);
+					return true;
+				}
 				break;
 		}
 
@@ -286,8 +296,11 @@ static bool inbound_process(Packet* packet) {
 	// 6. SPD Lookup 
 	SP* sp = spd_get_sp(packet->ni, ip);
 	if(!sp) {
-		//printf(" 6. SPD Lookup : Discard ip \n");
-		return false;
+#if DEBUG
+		printf("Can'nt found SP\n");
+#endif
+		ni_free(packet);
+		return true;
 	}
 
 	ether = (Ether*)(packet->buffer + packet->start);
@@ -302,7 +315,9 @@ static bool inbound_process(Packet* packet) {
 }
 
 static bool outbound_process(Packet* packet) {
+#if DEBUG
 	printf("outbound process\n");
+#endif
 	NetworkInterface* ni = packet->ni;
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;
@@ -336,7 +351,9 @@ static bool outbound_process(Packet* packet) {
 		sp = spd_get_sp(packet->ni, ip);
 
 	if(!sp) {
+#if DEBUG
 		printf("Can'nt found sp\n");
+#endif
 		return false;
 	}
 
@@ -356,24 +373,34 @@ tcp_packet:
 	//get already pointed SA, SA bundle
 	if(!sa) {
 		sa = sp_get_sa(sp, ip, OUT);
+#if DEBUG
 		if(sa)
-			printf("SA get!\n");
+			printf("SA get\n");
+#endif
 	}
 
 	if(!sa) {
 		//get SA, SA bundle from sad
 		sa = sp_find_sa(sp, ip);
+#if DEBUG
 		if(sa)
-			printf("SA find!\n");
+			printf("SA find\n");
+#endif
 	}
 
 	if(!sa) {
 		sa = ike_sa_get(ip, sp); //this function not work;
+#if DEBUG
+		if(sa)
+			printf("SA get from ike\n");
+#endif
 	}
 
 	if(!sa) {
 		ni_free(packet);
+#if DEBUG
 		printf("Can'nt found SA\n");
+#endif
 		return true;
 	}
 
@@ -390,14 +417,18 @@ tcp_packet:
 
 		if(!sa) {
 			ni_free(packet);
+#if DEBUG
 			printf("Can'nt found SA\n");
+#endif
 			return true;
 		}
 
 		switch(content->ipsec_protocol) {
 			case IP_PROTOCOL_ESP:
 				if(!ipsec_encrypt(packet, content, sa)) {
+#if DEBUG
 					printf("Can'nt encrypt packet\n");
+#endif
 					ni_free(packet);
 					return true;
 				}
@@ -405,7 +436,9 @@ tcp_packet:
 
 			case IP_PROTOCOL_AH:
 				if(!ipsec_auth(packet, content, sa)) {
+#if DEBUG
 					printf("Can'nt authenticate packet\n");
+#endif
 					ni_free(packet);
 					return true;
 				}
@@ -430,8 +463,8 @@ bool ipsec_process(Packet* packet) {
 	if(arp_process(packet))
 		return true;
 
- //	if(icmp_process(packet))
- //		return true;
+ 	if(icmp_process(packet))
+ 		return true;
 
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
 	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
@@ -445,7 +478,6 @@ bool ipsec_process(Packet* packet) {
 
 
 		return false;
-	} else {
 	}
 
 	return false;

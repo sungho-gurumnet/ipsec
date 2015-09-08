@@ -332,25 +332,20 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 			list_iterator_init(&list_iter, dest_list);
 			while(list_iterator_has_next(&list_iter)) {
 				SA* sa = list_iterator_next(&list_iter);
-				printf("0\n");
 				if(content->ipsec_protocol != sa->ipsec_protocol)
 					continue;
 
-				printf("1\n");
 				//mode check
 				if(content->ipsec_mode != sa->ipsec_mode)
 					continue;
 
-				printf("2\n");
 				//algorithm check
 				switch(content->ipsec_mode) {
 					case IPSEC_MODE_TRANSPORT:
 						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-							printf("2.1\n");
 							if(((Content_ESP_Transport*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm)
 								continue;
 
-							printf("2.2\n");
 							if(((Content_ESP_Transport*)content)->auth_algorithm != ((SA_ESP*)sa)->auth_algorithm)
 								continue;
 						} else {
@@ -364,20 +359,16 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						uint32_t t_src_ip;
 						uint32_t t_dest_ip;
 						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-							printf("2.3\n");
 							if(((Content_ESP_Tunnel*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm) {
-								printf("here?\n");
 								continue;
 							}
 
-							printf("2.4\n");
 							if(((Content_ESP_Tunnel*)content)->auth_algorithm != ((SA_ESP*)sa)->auth_algorithm)
 								continue;
 							
 							t_src_ip = ((Content_ESP_Tunnel*)content)->t_src_ip;
 							t_dest_ip = ((Content_ESP_Tunnel*)content)->t_dest_ip;
 						} else {
-							printf("2.5\n");
 							if(((Content_AH_Tunnel*)content)->auth_algorithm != ((SA_AH*)sa)->auth_algorithm)
 								continue;
 
@@ -394,10 +385,8 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						break;
 				}
 
-				printf("3\n");
 				//address check
 				if(!first_sa) {
-					printf("3.1");
 					//TODO add protocol
 					if(sp->is_src_ip_sa_share) {
 						if(sp->src_ip != sa->src_ip || sp->src_mask != sa->src_mask)
@@ -407,7 +396,6 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						if(src_ip != sa->src_ip || sa->src_mask != 0xffffffff)
 							continue;
 					}
-					printf("3.2");
 
 					if(sp->is_dest_ip_sa_share) {
 						if(sp->dest_ip != sa->dest_ip || sp->dest_mask != sa->dest_mask)
@@ -417,7 +405,6 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						if(dest_ip != sa->dest_ip || sa->dest_mask != 0xffffffff)
 							continue;
 					}
-					printf("3.3");
 
 					//TODO add port
 				} else {
@@ -428,7 +415,6 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 						continue;
 				}
 				
-				printf("4\n");
 				next_sa = sa;
 				goto next;
 			}
