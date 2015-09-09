@@ -180,7 +180,7 @@ static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
 	AH* ah = NULL;
 
 	if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
-		if(!transport_set(packet, AH_HEADER_LEN, 0))
+		if(!transport_set(packet, AH_HEADER_LEN + ((SA_AH*)sa)->auth_key_length, 0))
 			return false;
 
 		ether = (Ether*)(packet->buffer + packet->start);
@@ -190,7 +190,7 @@ static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
 		//ip->length = endian16(endian16(ip->length) + AH_HEADER_LEN + ICV_LEN);
 		ah->next_hdr = ip->protocol;
 	} else if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
-		if(!tunnel_set(packet, AH_HEADER_LEN, 0))
+		if(!tunnel_set(packet, AH_HEADER_LEN + ((SA_AH*)sa)->auth_key_length, 0))
 			return false;
 
 		ether = (Ether*)(packet->buffer + packet->start);
@@ -201,7 +201,7 @@ static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
 		ah->next_hdr = IP_PROTOCOL_IP;
 	}
 
-	ah->len = 4; //check
+	ah->len = ((AH_HEADER_LEN + ((SA_AH*)sa)->auth_key_length) / 6) - 2; //check
 	ah->spi = endian32(sa->spi);
 	ah->seq_num = endian32(++sa->window->seq_counter);
 
@@ -215,6 +215,7 @@ static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
 	ip->ttl = 0;
 	ip->protocol = IP_PROTOCOL_AH;
 	ip->flags_offset = 0;
+	ip->checksum = 0;
 	memset(ah->auth_data, 0, ICV_LEN);
 
 	((Authentication*)(((SA_AH*)sa)->auth))->authenticate(ip, endian16(ip->length), ah->auth_data, sa);
@@ -227,14 +228,12 @@ static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
 	switch(content->ipsec_mode) {
 		case IPSEC_MODE_TRANSPORT:
 			ip->ttl--;
-			ip->checksum = 0;
 			ip->checksum = endian16(checksum(ip, ip->ihl * 4));
 			break;
 		case IPSEC_MODE_TUNNEL:
 			ip->ttl = IP_TTL;
 			ip->source = endian32(((Content_AH_Tunnel*)content)->t_src_ip);
 			ip->destination = endian32(((Content_AH_Tunnel*)content)->t_dest_ip);
-			ip->checksum = 0;
 			ip->checksum = endian16(checksum(ip, ip->ihl * 4));
 			break;
 	}

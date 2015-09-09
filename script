@@ -1,25 +1,26 @@
-connect 192.168.100.254
-$vmid = create core: 1 memory: 0x1000000 storage: 0x1000000 nic: mac: 0 dev: eth0 ibuf: 1024 obuf: 1024 iband: 1000000000 oband: 1000000000 hpad: 128 tpad: 128 pool: 0x400000 nic: mac: 0 dev: eth1 ibuf: 1024 obuf: 1024 iband: 1000000000 oband: 1000000000 hpad: 128 tpad: 128 pool: 0x400000 args: hello world
+connect 192.168.100.252
+$vmid = create core: 1 memory: 0x1000000 storage: 0x1000000 nic: mac: 0 dev: eth0 ibuf: 1024 obuf: 1024 iband: 1000000000 oband: 1000000000 hpad: 64 tpad: 64 pool: 0x4000000 nic: mac: 0 dev: eth1 ibuf: 1024 obuf: 1024 iband: 1000000000 oband: 1000000000 hpad: 64 tpad: 64 pool: 0x4000000 args: hello world
 upload $vmid main
 start $vmid
 
 #Manage IP
-stdin $vmid 0 "ip add eth0 192.168.100.253"
-stdin $vmid 0 "ip add eth1 10.0.0.1"
-#stdin $vmid 0 "ip add eth0 192.168.100.253"
+stdin $vmid 0 "ip add eth0 10.0.0.2"
+stdin $vmid 0 "ip add eth1 192.168.101.254"
+#stdin $vmid 0 "ip add eth0 192.168.100.254"
 #stdin $vmid 0 "ip add eth1 10.0.0.2"
 
 #Manage SP
-stdin $vmid 0 "sp add eth0 -p any -s 192.168.100.0/24:0 -d 192.168.100.0/24:0 -a ipsec/out -i 0 -o eth1"
-stdin $vmid 0 "sp add eth1 -p any -s 192.168.100.0/24:0 -d 192.168.100.0/24:0 -a ipsec/in -i 0 -o eth0"
+stdin $vmid 0 "sp add eth0 -p any -s 192.168.100.0/24:0 -d 192.168.101.0/24:0 -a ipsec/in -i 0 -o eth1"
+stdin $vmid 0 "content add eth0 0 -m tunnel 10.0.0.1-10.0.0.2 -E 3des_cbc -i 0"
+
+stdin $vmid 0 "sp add eth1 -p any -s 192.168.101.0/24:0 -d 192.168.100.0/24:0 -a ipsec/out -i 0 -o eth0"
+stdin $vmid 0 "content add eth1 0 -m tunnel 10.0.0.2-10.0.0.1 -E 3des_cbc -i 0"
 
 #Manage Content
-stdin $vmid 0 "content add eth0 0 -m tunnel 10.0.0.1-10.0.0.2 -E des_cbc -i 0"
-stdin $vmid 0 "content add eth1 0 -m tunnel 10.0.0.2-10.0.0.1 -E des_cbc -i 0"
 
 #Manage SA
-stdin $vmid 0 "sa add eth0 -p any -s 192.168.100.0/24:0 -d 192.168.100.0/24:0 -m tunnel 10.0.0.1-10.0.0.2 -spi 0x200 -E des_cbc 0x0123456789abcdef"
-stdin $vmid 0 "sa add eth1 -p any -s 192.168.100.0/24:0 -d 192.168.100.0/24:0 -m tunnel 10.0.0.2-10.0.0.1 -spi 0x201 -E des_cbc 0x0123456789abcdef"
+stdin $vmid 0 "sa add eth0 -p any -s 192.168.100.0/24:0 -d 192.168.101.0/24:0 -m tunnel 10.0.0.1-10.0.0.2 -spi 0x200 -E 3des_cbc 0x0123456789abcdef0123456789abcdef0123456789abcdef"
+stdin $vmid 0 "sa add eth1 -p any -s 192.168.101.0/24:0 -d 192.168.100.0/24:0 -m tunnel 10.0.0.2-10.0.0.1 -spi 0x201 -E 3des_cbc 0x0123456789abcdef0123456789abcdef0123456789abcdef"
 
 #Dump SPD & SAD
 stdin $vmid 0 "sp list"
