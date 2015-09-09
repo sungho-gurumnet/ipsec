@@ -263,7 +263,7 @@ static void key_dump(uint64_t* _key, uint16_t key_length) {
 	uint8_t* key = (uint8_t*)_key;
 	printf("0x");
 	for(int i = 0; i < key_length; i++) {
-		printf("%x", *(key++)& 0xff);
+		printf("%02x", *(key++)& 0xff);
 	}
 }
 
