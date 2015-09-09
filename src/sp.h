@@ -71,9 +71,7 @@ typedef struct _SP{
 	uint16_t dest_port;
 	bool is_dest_port_sa_share;
 
-
-	List* sa_inbound;
-	List* sa_outbound;
+	List* sa_list;
 
 	List* contents;
 } SP;
@@ -82,8 +80,9 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs);
 bool sp_free(SP* sp);
 bool sp_add_content(SP* sp, Content* content, int priority);
 Content* sp_remove_content(SP* sp, int index);
-bool sp_add_sa(SP* sp, SA* sa, uint8_t direction);
-bool sp_remove_sa(SP* sp, SA* sa, uint8_t direction);
-SA* sp_get_sa(SP* sp, IP* ip, uint8_t direct);
+bool sp_add_sa(SP* sp, SA* sa);
+bool sp_remove_sa(SP* sp, SA* sa);
+SA* sp_get_sa(SP* sp, IP* ip);
 SA* sp_find_sa(SP* sp, IP* ip);
+bool sp_verify_sa(SP* sp, List* sa_list, IP* ip);
 #endif /* __sp_H__ */

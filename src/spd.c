@@ -7,23 +7,49 @@
 #include <util/list.h>
 
 #include "spd.h"
+#include "sp.h"
 
-List* spd_get(NetworkInterface* ni) {
-	List* spd = ni_config_get(ni, SPD);
+List* spd_get(NetworkInterface* ni, uint8_t direction) {
+	List* spd = NULL;
+
+	switch(direction) {
+		case DIRECTION_IN:
+			spd = ni_config_get(ni, SPD_IN);
+			break;
+		case DIRECTION_OUT:
+			spd = ni_config_get(ni, SPD_OUT);
+			break;
+	}
 
 	return spd;
 }
 
-SP* spd_get_sp_index(NetworkInterface* ni, uint16_t index) {
-	List* spd = ni_config_get(ni, SPD);
+SP* spd_get_sp_index(NetworkInterface* ni, uint8_t direction, uint16_t index) {
+	List* spd = NULL;
+	switch(direction) {
+		case DIRECTION_IN:
+			spd = ni_config_get(ni, SPD_IN);
+			break;
+		case DIRECTION_OUT:
+			spd = ni_config_get(ni, SPD_OUT);
+			break;
+	}
 	if(!spd)
 		return NULL;
 
 	return list_get(spd, index);
 }
 
-SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
-	List* spd = ni_config_get(ni, SPD);
+SP* spd_get_sp(NetworkInterface* ni, uint8_t direction, IP* ip) {
+	List* spd = NULL;
+	switch(direction) {
+		case DIRECTION_IN:
+			spd = ni_config_get(ni, SPD_IN);
+			break;
+		case DIRECTION_OUT:
+			spd = ni_config_get(ni, SPD_OUT);
+			break;
+	}
 	if(!spd)
 		return NULL;
 
@@ -70,30 +96,56 @@ SP* spd_get_sp(NetworkInterface* ni, IP* ip) {
 	return NULL;
 }
 
-bool spd_add_sp(NetworkInterface* ni, SP* sp, int priority) {
-	List* spd = ni_config_get(ni, SPD);
-	if(!spd) {
-		spd = list_create(ni->pool);
-		if(!spd) { 
-			printf("Can'nt create SPD\n");
-			return false;
-		}
-		if(!ni_config_put(ni, SPD, spd)) {
-			list_destroy(spd);
-			printf("Can'nt add SPD\n");
-			return false;
-		}
+bool spd_add_sp(NetworkInterface* ni, uint8_t direction, SP* sp, int priority) {
+	List* spd = NULL;
+	switch(direction) {
+		case DIRECTION_IN:
+			spd = ni_config_get(ni, SPD_IN);
+			if(!spd) {
+				spd = list_create(ni->pool);
+			}
+			if(!spd) { 
+				printf("Can'nt create SPD\n");
+				return false;
+			}
+			if(!ni_config_put(ni, SPD_IN, spd)) {
+				list_destroy(spd);
+				printf("Can'nt add SPD\n");
+				return false;
+			}
+			break;
+		case DIRECTION_OUT:
+			spd = ni_config_get(ni, SPD_OUT);
+			if(!spd) {
+				spd = list_create(ni->pool);
+			}
+			if(!spd) { 
+				printf("Can'nt create SPD\n");
+				return false;
+			}
+			if(!ni_config_put(ni, SPD_OUT, spd)) {
+				list_destroy(spd);
+				printf("Can'nt add SPD\n");
+				return false;
+			}
+			break;
 	}
 
 	return list_add_at(spd, priority, sp);
 }
 
-SP* spd_remove_sp(NetworkInterface* ni, int index) {
-	List* spd = ni_config_get(ni, SPD);
-	if(!spd) {
-		printf("Can'nt found SP\n");
-		return NULL;
+SP* spd_remove_sp(NetworkInterface* ni, uint8_t direction, int index) {
+	List* spd = NULL;
+	switch(direction) {
+		case DIRECTION_IN:
+			spd = ni_config_get(ni, SPD_IN);
+			break;
+		case DIRECTION_OUT:
+			spd = ni_config_get(ni, SPD_OUT);
+			break;
 	}
+	if(!spd)
+		return NULL;
 
 	SP* sp = list_remove(spd, index);
 	if(!sp) {
@@ -103,14 +155,29 @@ SP* spd_remove_sp(NetworkInterface* ni, int index) {
 
 	if(list_is_empty(spd)) {
 		list_destroy(spd);
-		ni_config_remove(ni, SPD);
+		switch(direction) {
+			case DIRECTION_IN:
+				ni_config_remove(ni, SPD_IN);
+				break;
+			case DIRECTION_OUT:
+				ni_config_remove(ni, SPD_OUT);
+				break;
+		}
 	}
 
 	return sp;
 }
 
-void spd_delete_all(NetworkInterface* ni) {
-	List* spd = ni_config_get(ni, SPD);
+void spd_delete_all(NetworkInterface* ni, uint8_t direction) {
+	List* spd = NULL;
+	switch(direction) {
+		case DIRECTION_IN:
+			spd = ni_config_get(ni, SPD_IN);
+			break;
+		case DIRECTION_OUT:
+			spd = ni_config_get(ni, SPD_OUT);
+			break;
+	}
 	if(!spd)
 		return;
 

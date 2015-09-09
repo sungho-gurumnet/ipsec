@@ -6,12 +6,12 @@
 #include "sp.h"
 //#include "content.h"
 
-#define SPD "net.ipsec.spd"
+#define SPD_IN		"net.ipsec.spd_in"
+#define SPD_OUT 	"net.ipsec.spd_out"
 
-List* spd_get(NetworkInterface* ni);
-SP* spd_get_sp(NetworkInterface* ni, IP* ip);
-SP* spd_get_sp_index(NetworkInterface* ni, uint16_t index);
-bool spd_add_sp(NetworkInterface* ni, SP* sp, int priority);
-bool spd_delete_sp(NetworkInterface* ni, int index);
-void spd_delete_all(NetworkInterface* ni);
+List* spd_get(NetworkInterface* ni, uint8_t direction);
+SP* spd_get_sp(NetworkInterface* ni, uint8_t direction, IP* ip);
+SP* spd_get_sp_index(NetworkInterface* ni, uint8_t direction, uint16_t index);
+bool spd_add_sp(NetworkInterface* ni, uint8_t direction, SP* sp, int priority);
+void spd_delete_all(NetworkInterface* ni, uint8_t direction);
 #endif

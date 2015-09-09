@@ -12,10 +12,6 @@
 //#include "crypto.h"
 //#include "auth.h"
 
-// Direction
-#define IN			0x01
-#define OUT			0x02
-
 typedef enum {
 	SA_NONE,
 	SA_IPSEC_MODE,

@@ -248,9 +248,7 @@ static bool inbound_process(Packet* packet) {
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;
 
-	if(ip->protocol != IP_PROTOCOL_ESP && (ip->protocol != IP_PROTOCOL_AH))
-		return false;
-	// 1. SAD Lookup
+	List* sa_list = list_create(packet->ni->pool);
 	SA* sa = NULL;
 	while((ip->protocol == IP_PROTOCOL_ESP) || (ip->protocol == IP_PROTOCOL_AH)) {
 		switch(ip->protocol) {
@@ -262,12 +260,10 @@ static bool inbound_process(Packet* packet) {
 #if DEBUG
 					printf("Can'nt found SA\n");
 #endif
-					ni_free(packet);
-					return true;
+					goto error;
 				}
 				if(!ipsec_decrypt(packet, sa)) {
-					ni_free(packet);
-					return true;
+					goto error;
 				}
 				break;
 
@@ -279,29 +275,34 @@ static bool inbound_process(Packet* packet) {
 #if DEBUG
 					printf("Can'nt found SA\n");
 #endif
-					return false;
+					goto error;
 				}
 				if(!ipsec_proof(packet, sa)) {
-					ni_free(packet);
-					return true;
+					goto error;
 				}
 				break;
 		}
 
+		list_add_at(sa_list, 0, sa);
 		ether = (Ether*)(packet->buffer + packet->start);
 		ip = (IP*)ether->payload;
 	}
 
 	// 6. SPD Lookup 
-	SP* sp = spd_get_sp(packet->ni, ip);
+	SP* sp = spd_get_sp(packet->ni, DIRECTION_IN, ip);
 	if(!sp) {
 #if DEBUG
 		printf("Can'nt found SP\n");
 #endif
-		ni_free(packet);
-		return true;
+		goto error;
 	}
 
+	// 7. Verification
+	if(!sp_verify_sa(sp, sa_list, ip)) {
+		goto error;
+	}
+
+	
 	ether = (Ether*)(packet->buffer + packet->start);
         ip = (IP*)ether->payload;
 	ether->smac = endian48(sp->out_ni->mac);
@@ -309,6 +310,13 @@ static bool inbound_process(Packet* packet) {
 	ether->type = endian16(ETHER_TYPE_IPv4);
 
 	ni_output(sp->out_ni, packet);
+	list_destroy(sa_list);
+
+	return true;
+
+error:
+	ni_free(packet);
+	list_destroy(sa_list);
 
 	return true;
 }
@@ -347,7 +355,7 @@ static bool outbound_process(Packet* packet) {
 	}
 
 	if(!sp)
-		sp = spd_get_sp(packet->ni, ip);
+		sp = spd_get_sp(packet->ni, DIRECTION_OUT, ip);
 
 	if(!sp) {
 #if DEBUG
@@ -371,7 +379,7 @@ tcp_packet:
 
 	//get already pointed SA, SA bundle
 	if(!sa) {
-		sa = sp_get_sa(sp, ip, OUT);
+		sa = sp_get_sa(sp, ip);
 #if DEBUG
 		if(sa)
 			printf("SA get\n");

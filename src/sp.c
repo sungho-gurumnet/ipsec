@@ -72,11 +72,13 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
 }
 
 bool sp_free(SP* sp) {
-	if(sp->sa_inbound)
-		list_destroy(sp->sa_inbound);
-	if(sp->sa_outbound)
-		list_destroy(sp->sa_outbound);
+	if(sp->sa_list)
+		list_destroy(sp->sa_list);
+
 	if(sp->contents) {
+		if(!list_is_empty(sp->contents))
+			return false;
+
 		list_destroy(sp->contents);
 	}
 
@@ -130,78 +132,38 @@ Content* sp_remove_content(SP* sp, int index) {
 	return content;
 }
 
-bool sp_add_sa(SP* sp, SA* sa, uint8_t direction) {
-	switch(direction) {
-		case DIRECTION_IN:
-			if(!sp->sa_inbound) {
-				sp->sa_inbound = list_create(sp->ni->pool);
-			}
-			if(!sp->sa_inbound)
-				return false;
-
-			return list_add(sp->sa_inbound, sa);
-		case DIRECTION_OUT:
-			if(!sp->sa_outbound) {
-				sp->sa_outbound = list_create(sp->ni->pool);
-			}
-			if(!sp->sa_outbound)
-				return false;
-
-			return list_add(sp->sa_outbound, sa);
+bool sp_add_sa(SP* sp, SA* sa) {
+	if(!sp->sa_list) {
+		sp->sa_list = list_create(sp->ni->pool);
 	}
+	if(!sp->sa_list)
+		return false;
 
-	return false;
+	return list_add(sp->sa_list, sa);
 }
 
-bool sp_remove_sa(SP* sp, SA* sa, uint8_t direction) {
-	switch(direction) {
-		case DIRECTION_IN:
-			if(!sp->sa_inbound)
-				return false;
+bool sp_remove_sa(SP* sp, SA* sa) {
+	if(!sp->sa_list)
+		return false;
 
-			if(!list_remove_data(sp->sa_inbound, sa)) {
-				return false;
-			}
-
-			if(list_is_empty(sp->sa_inbound)) {
-				list_destroy(sp->sa_inbound);
-				sp->sa_inbound = NULL;
-			}
-
-			return true;
-		case DIRECTION_OUT:
-			if(!sp->sa_outbound)
-				return false;
-
-			if(!list_remove_data(sp->sa_outbound, sa)) {
-				return false;
-			}
-
-			if(list_is_empty(sp->sa_outbound)) {
-				list_destroy(sp->sa_outbound);
-				sp->sa_outbound = NULL;
-			}
-
-			return true;
+	if(!list_remove_data(sp->sa_list, sa)) {
+		return false;
 	}
 
-	return false;
+	if(list_is_empty(sp->sa_list)) {
+		list_destroy(sp->sa_list);
+		sp->sa_list = NULL;
+	}
+
+	return true;
 }
 //TODO
-SA* sp_get_sa(SP* sp, IP* ip, uint8_t direction) {
-	ListIterator iter;
-
-	if(direction == IN) {
-		if(!sp->sa_inbound)
-			return NULL;
-		list_iterator_init(&iter, sp->sa_inbound);
-	} else if(direction == OUT) {
-		if(!sp->sa_outbound)
-			return NULL;
-		list_iterator_init(&iter, sp->sa_outbound);
-	} else
+SA* sp_get_sa(SP* sp, IP* ip) {
+	if(!sp->sa_list)
 		return NULL;
 
+	ListIterator iter;
+	list_iterator_init(&iter, sp->sa_list);
 	while(list_iterator_has_next(&iter)) {
 		SA* sa = list_iterator_next(&iter);
 		uint8_t protocol;
@@ -434,12 +396,112 @@ next:
 		}
 	}
 
-	if(!sp->sa_outbound)
-		sp->sa_outbound = list_create(sp->ni->pool);
+	if(!sp->sa_list)
+		sp->sa_list = list_create(sp->ni->pool);
 
-	if(sp->sa_outbound) {
-		list_add(sp->sa_outbound, first_sa);
+	if(sp->sa_list) {
+		list_add(sp->sa_list, first_sa);
 	}
 
 	return first_sa;
+}
+
+bool sp_verify_sa(SP* sp, List* sa_list, IP* ip) {
+	SA* pre_sa = NULL;
+	ListIterator iter;
+	list_iterator_init(&iter, sp->contents);
+	while(list_iterator_has_next(&iter)) {
+		SA* sa = list_remove_first(sa_list);
+		if(!sa)
+			return false;
+
+		Content* content = list_iterator_next(&iter);
+		// verification SA
+
+		if(content->ipsec_protocol != sa->ipsec_protocol)
+			return false;
+
+		//mode check
+		if(content->ipsec_mode != sa->ipsec_mode)
+			return false;
+		
+		switch(content->ipsec_mode) {
+			case IPSEC_MODE_TRANSPORT:
+				if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+					if(((Content_ESP_Transport*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm)
+						return false;
+
+					if(((Content_ESP_Transport*)content)->auth_algorithm != ((SA_ESP*)sa)->auth_algorithm)
+						return false;
+				} else {
+					if(((Content_AH_Transport*)content)->auth_algorithm != ((SA_AH*)sa)->auth_algorithm)
+						return false;
+				}
+
+				break;
+			case IPSEC_MODE_TUNNEL:
+				;
+				uint32_t t_src_ip;
+				uint32_t t_dest_ip;
+				if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+					if(((Content_ESP_Tunnel*)content)->crypto_algorithm != ((SA_ESP*)sa)->crypto_algorithm) {
+						return false;
+					}
+
+					if(((Content_ESP_Tunnel*)content)->auth_algorithm != ((SA_ESP*)sa)->auth_algorithm)
+						return false;
+					
+					t_src_ip = ((Content_ESP_Tunnel*)content)->t_src_ip;
+					t_dest_ip = ((Content_ESP_Tunnel*)content)->t_dest_ip;
+				} else {
+					if(((Content_AH_Tunnel*)content)->auth_algorithm != ((SA_AH*)sa)->auth_algorithm)
+						return false;
+
+					t_src_ip = ((Content_AH_Tunnel*)content)->t_src_ip;
+					t_dest_ip = ((Content_AH_Tunnel*)content)->t_dest_ip;
+				}
+				
+				//ip check
+				if(sa->t_src_ip != t_src_ip)
+					return false;
+
+				if(sa->t_dest_ip != t_dest_ip)
+					return false;
+				break;
+		}
+
+		//address check
+		if(!pre_sa) {
+			//TODO add protocol
+			if(sp->is_src_ip_sa_share) {
+				if(sp->src_ip != sa->src_ip || sp->src_mask != sa->src_mask)
+					return false;
+			} else {
+				uint32_t src_ip = endian32(ip->source);
+				if(src_ip != sa->src_ip || sa->src_mask != 0xffffffff)
+					return false;
+			}
+
+			if(sp->is_dest_ip_sa_share) {
+				if(sp->dest_ip != sa->dest_ip || sp->dest_mask != sa->dest_mask)
+					return false;
+			} else {
+				uint32_t dest_ip = endian32(ip->source);
+				if(dest_ip != sa->dest_ip || sa->dest_mask != 0xffffffff)
+					return false;
+			}
+
+			//TODO add port
+		} else {
+			if(pre_sa->src_ip != sa->src_ip || pre_sa->src_mask != sa->src_mask)
+				return false;
+
+			if(pre_sa->dest_ip != sa->dest_ip || pre_sa->dest_mask != sa->dest_mask)
+				return false;
+		}
+
+		pre_sa = sa;
+	}
+
+	return true;
 }

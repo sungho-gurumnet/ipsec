@@ -960,316 +960,344 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 }
 
 static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_status)) {
-	for(int i = 1; i < argc; i++) {
-		if(!strcmp(argv[1], "add")) {
-			i++;
-			NetworkInterface* ni = parse_ni(argv[i]);
-			if(!ni) {
-				printf("Can'nt found Network Interface\n");
-			}
+	int i = 1;
+	if(!strcmp(argv[i], "add")) {
+		i++;
+		NetworkInterface* ni = parse_ni(argv[i]);
+		if(!ni) {
+			printf("Can'nt found Network Interface\n");
+		}
 
-			uint8_t protocol = IP_PROTOCOL_ANY;
-			bool is_protocol_sa_share = true;
-			uint32_t src_ip = 0;
-			bool is_src_ip_sa_share = true;
-			uint32_t src_mask = 0xffffffff;
-			uint32_t dest_ip = 0;
-			bool is_dest_ip_sa_share = true;
-			uint32_t dest_mask = 0xffffffff;
-			uint16_t src_port = 0;
-			bool is_src_port_sa_share = true;
-			uint16_t dest_port = 0;
-			bool is_dest_port_sa_share = true;
+		uint8_t protocol = IP_PROTOCOL_ANY;
+		bool is_protocol_sa_share = true;
+		uint32_t src_ip = 0;
+		bool is_src_ip_sa_share = true;
+		uint32_t src_mask = 0xffffffff;
+		uint32_t dest_ip = 0;
+		bool is_dest_ip_sa_share = true;
+		uint32_t dest_mask = 0xffffffff;
+		uint16_t src_port = 0;
+		bool is_src_port_sa_share = true;
+		uint16_t dest_port = 0;
+		bool is_dest_port_sa_share = true;
 
-			uint8_t direction = DIRECTION_IN;
-			uint8_t ipsec_action = IPSEC_ACTION_BYPASS;
-			uint8_t index = 0;
+		uint8_t direction = DIRECTION_IN;
+		uint8_t ipsec_action = IPSEC_ACTION_BYPASS;
+		uint8_t index = 0;
 
-			NetworkInterface* out_ni = NULL;
+		NetworkInterface* out_ni = NULL;
 
-			i++;
-			for(; i < argc; i++) {
-				if(!strcmp(argv[i], "-p")) { //protocol
-					i++;
-					if(!strcmp(argv[i], "any")) {
-						protocol = IP_PROTOCOL_ANY;
-					} else if(!strcmp(argv[i], "tcp")) {
-						protocol = IP_PROTOCOL_TCP;
-					} else if(!strcmp(argv[i], "udp")) {
-						protocol = IP_PROTOCOL_UDP;
-					} else if(!strcmp(argv[i], "icmp")) {
-						protocol = IP_PROTOCOL_ICMP;
+		i++;
+		for(; i < argc; i++) {
+			if(!strcmp(argv[i], "-p")) { //protocol
+				i++;
+				if(!strcmp(argv[i], "any")) {
+					protocol = IP_PROTOCOL_ANY;
+				} else if(!strcmp(argv[i], "tcp")) {
+					protocol = IP_PROTOCOL_TCP;
+				} else if(!strcmp(argv[i], "udp")) {
+					protocol = IP_PROTOCOL_UDP;
+				} else if(!strcmp(argv[i], "icmp")) {
+					protocol = IP_PROTOCOL_ICMP;
+				} else {
+					printf("Wrong protocol parameter\n");
+					return i;
+				}
+			} else if(!strcmp(argv[i], "-s")) {
+				i++;
+				if(!parse_addr_mask_port(argv[i], &src_ip, &src_mask, &src_port)) {
+					printf("Wrong source parameter\n");
+					return i;
+				}
+			} else if(!strcmp(argv[i], "-d")) {
+				i++;
+				if(!parse_addr_mask_port(argv[i], &dest_ip, &dest_mask, &dest_port)) {
+					printf("Wrong destination parameter\n");
+					return i;
+				}
+			} else if(!strcmp(argv[i], "-a")) {
+				i++;
+				char* _argv = argv[i];
+				if(!strncmp(_argv, "ipsec", 5)) {
+					_argv += 5;
+					ipsec_action = IPSEC_ACTION_IPSEC;
+				} else if(!strncmp(_argv, "bypass", 6)) {
+					_argv += 6;
+					ipsec_action = IPSEC_ACTION_BYPASS;
+				} else {
+					printf("Invalid action\n");
+					return i;
+				}
+
+				if(*_argv != '/' && *_argv != '\0') {
+					printf("Invalid direction\n");
+					return i;
+				}
+
+				if(*_argv == '/') {
+					_argv++;
+					if(!strcmp(_argv, "in")) {
+						direction = DIRECTION_IN;
+					} else if(!strcmp(_argv, "out")) {
+						direction = DIRECTION_OUT;
 					} else {
-						printf("Wrong protocol parameter\n");
-						return i;
-					}
-				} else if(!strcmp(argv[i], "-s")) {
-					i++;
-					if(!parse_addr_mask_port(argv[i], &src_ip, &src_mask, &src_port)) {
-						printf("Wrong source parameter\n");
-						return i;
-					}
-				} else if(!strcmp(argv[i], "-d")) {
-					i++;
-					if(!parse_addr_mask_port(argv[i], &dest_ip, &dest_mask, &dest_port)) {
-						printf("Wrong destination parameter\n");
-						return i;
-					}
-				} else if(!strcmp(argv[i], "-a")) {
-					i++;
-					char* _argv = argv[i];
-					if(!strncmp(_argv, "ipsec", 5)) {
-						_argv += 5;
-						ipsec_action = IPSEC_ACTION_IPSEC;
-					} else if(!strncmp(_argv, "bypass", 6)) {
-						_argv += 6;
-						ipsec_action = IPSEC_ACTION_BYPASS;
-					} else {
-						printf("Invalid action\n");
-						return i;
-					}
-
-					if(*_argv != '/' && *_argv != '\0') {
 						printf("Invalid direction\n");
 						return i;
 					}
-
-					if(*_argv == '/') {
-						_argv++;
-						if(!strcmp(_argv, "in")) {
-							direction = DIRECTION_IN;
-						} else if(!strcmp(_argv, "out")) {
-							direction = DIRECTION_OUT;
-						} else {
-							printf("Invalid direction\n");
-							return i;
-						}
-					}
-				} else if(!strcmp(argv[i], "-i")) {
-					i++;
-					if(!is_uint8(argv[i])) {
-						printf("index is must be uint8\n");
-						return i;
-					}
-
-					index = parse_uint8(argv[i]);
-				} else if(!strcmp(argv[i], "-o")) {
-					i++;
-					out_ni = parse_ni(argv[i]);
-					if(!out_ni) {
-						printf("Can'nt found Out Network Interface\n");
-						return i;
-					}
-				} else {
-					printf("Invalid Value\n");
+				}
+			} else if(!strcmp(argv[i], "-i")) {
+				i++;
+				if(!is_uint8(argv[i])) {
+					printf("index is must be uint8\n");
 					return i;
 				}
-			}
 
-			//check null
-			uint64_t attrs[] = {
-				SP_PROTOCOL, protocol,
-				SP_IS_PROTOCOL_SA_SHARE, is_protocol_sa_share,
-
-				SP_SOURCE_IP, src_ip,
-				SP_IS_SOURCE_IP_SA_SHARE, is_src_ip_sa_share,
-				SP_SOURCE_NET_MASK, src_mask,
-				SP_SOURCE_PORT, src_port,
-				SP_IS_SOURCE_PORT_SA_SHARE, is_src_port_sa_share,
-
-				SP_OUT_NI, (uint64_t)out_ni,
-				SP_DESTINATION_IP, dest_ip,
-				SP_IS_DESTINATION_IP_SA_SHARE, is_dest_ip_sa_share,
-				SP_DESTINATION_NET_MASK, dest_mask,
-				SP_DESTINATION_PORT, dest_port,
-				SP_IS_DESTINATION_PORT_SHARE, is_dest_port_sa_share,
-
-				SP_IPSEC_ACTION, ipsec_action,
-				SP_DIRECTION, direction,
-
-				SP_NONE,
-			};
-
-			SP* sp = sp_alloc(ni, attrs);
-			if(sp == NULL)
-				return -1;
-
-			if(!spd_add_sp(ni, sp, index)) {
-				printf("Can'nt add sp\n");
-				sp_free(sp);
-				return -1;
-			}
-
-			printf("Security Policy added\n");
-			return 0;
-		} else if(!strcmp(argv[1], "remove")) {
-			//Not yet
-			return 0;
-		} else if(!strcmp(argv[1], "list")) {
-			printf("********SPD********\n");
-			printf("NI\tAction/Direction\tProtocol\tSource/Mask:Port\tDestination/Mask:Port\n");
-			void dump_ipsec_action(uint8_t ipsec_action) {
-				switch(ipsec_action) {
-					case IPSEC_ACTION_BYPASS:
-						printf("bypass");
-						break;
-					case IPSEC_ACTION_IPSEC:
-						printf("ipsec");
-						break;
+				index = parse_uint8(argv[i]);
+			} else if(!strcmp(argv[i], "-o")) {
+				i++;
+				out_ni = parse_ni(argv[i]);
+				if(!out_ni) {
+					printf("Can'nt found Out Network Interface\n");
+					return i;
 				}
+			} else {
+				printf("Invalid Value\n");
+				return i;
+			}
+		}
+
+		//check null
+		uint64_t attrs[] = {
+			SP_PROTOCOL, protocol,
+			SP_IS_PROTOCOL_SA_SHARE, is_protocol_sa_share,
+
+			SP_SOURCE_IP, src_ip,
+			SP_IS_SOURCE_IP_SA_SHARE, is_src_ip_sa_share,
+			SP_SOURCE_NET_MASK, src_mask,
+			SP_SOURCE_PORT, src_port,
+			SP_IS_SOURCE_PORT_SA_SHARE, is_src_port_sa_share,
+
+			SP_OUT_NI, (uint64_t)out_ni,
+			SP_DESTINATION_IP, dest_ip,
+			SP_IS_DESTINATION_IP_SA_SHARE, is_dest_ip_sa_share,
+			SP_DESTINATION_NET_MASK, dest_mask,
+			SP_DESTINATION_PORT, dest_port,
+			SP_IS_DESTINATION_PORT_SHARE, is_dest_port_sa_share,
+
+			SP_IPSEC_ACTION, ipsec_action,
+			SP_DIRECTION, direction,
+
+			SP_NONE,
+		};
+
+		SP* sp = sp_alloc(ni, attrs);
+		if(sp == NULL)
+			return -1;
+
+		if(!spd_add_sp(ni, direction, sp, index)) {
+			printf("Can'nt add sp\n");
+			sp_free(sp);
+			return -1;
+		}
+
+		printf("Security Policy added\n");
+		return 0;
+	} else if(!strcmp(argv[i], "remove")) {
+		//Not yet
+		return 0;
+	} else if(!strcmp(argv[i], "list")) {
+		i++;
+		printf("********SPD********\n");
+		printf("NI\tAction/Direction\tProtocol\tSource/Mask:Port\tDestination/Mask:Port\n");
+		void dump_ipsec_action(uint8_t ipsec_action) {
+			switch(ipsec_action) {
+				case IPSEC_ACTION_BYPASS:
+					printf("bypass");
+					break;
+				case IPSEC_ACTION_IPSEC:
+					printf("ipsec");
+					break;
+			}
+		}
+
+		void dump_ni(NetworkInterface* ni) {
+			uint16_t count = ni_count();
+			for(int i = 0; i < count; i++) {
+				if(ni == ni_get(i))
+					printf("eth%d", i);
+			}
+		}
+
+		void dump_direction(uint8_t direction) {
+			switch(direction) {
+				case DIRECTION_IN:
+					printf("in");
+					break;
+				case DIRECTION_OUT:
+					printf("out");
+					break;
+			}
+		}
+
+		void dump_ipsec_mode(uint8_t ipsec_mode) {
+			switch(ipsec_mode) {
+				case IPSEC_MODE_TUNNEL:
+					printf("tunnel");
+					break;
+				case IPSEC_MODE_TRANSPORT:
+					printf("transport");
+					break;
+			}
+		}
+
+		void dump_ipsec_protocol(uint8_t protocol) {
+			switch(protocol) {
+				case IP_PROTOCOL_ESP:
+					printf("esp");
+					break;
+				case IP_PROTOCOL_AH:
+					printf("ah");
+					break;
+			}
+		}
+
+		void dump_spd(uint16_t ni_index, uint8_t direction) {
+			NetworkInterface* ni = ni_get(ni_index);
+			if(!ni)
+				return;
+
+			List* spd = spd_get(ni, direction);
+			if(!spd) {
+				return;
 			}
 
-			void dump_ni(NetworkInterface* ni) {
-				uint16_t count = ni_count();
-				for(int i = 0; i < count; i++) {
-					if(ni == ni_get(i))
-						printf("eth%d", i);
-				}
-			}
+			ListIterator iter;
+			list_iterator_init(&iter, spd);
+			while(list_iterator_has_next(&iter)) {
+				SP* sp = list_iterator_next(&iter);
+				printf("eth%d -> ", ni_index);
+				dump_ni(sp->out_ni);
+				printf("\t");
+				dump_ipsec_action(sp->ipsec_action);
+				printf("/");
+				dump_direction(sp->direction);
+				printf("\t");
+				dump_protocol(sp->protocol);
+				printf("\t\t");
+				dump_addr(sp->src_ip);
+				printf("/");
+				printf("%d:%d\t", parse_mask(sp->src_mask), sp->src_port);
+				dump_addr(sp->dest_ip);
+				printf("/");
+				printf("%d:%d", parse_mask(sp->dest_mask), sp->dest_port);
+				printf("\n");
 
-			void dump_direction(uint8_t direction) {
-				switch(direction) {
-					case DIRECTION_IN:
-						printf("in");
-						break;
-					case DIRECTION_OUT:
-						printf("out");
-						break;
-				}
-			}
+				if(!sp->contents)
+					continue;
 
-			void dump_ipsec_mode(uint8_t ipsec_mode) {
-				switch(ipsec_mode) {
-					case IPSEC_MODE_TUNNEL:
-						printf("tunnel");
-						break;
-					case IPSEC_MODE_TRANSPORT:
-						printf("transport");
-						break;
-				}
-			}
-
-			void dump_ipsec_protocol(uint8_t protocol) {
-				switch(protocol) {
-					case IP_PROTOCOL_ESP:
-						printf("esp");
-						break;
-					case IP_PROTOCOL_AH:
-						printf("ah");
-						break;
-				}
-			}
-
-			void dump_spd(uint16_t ni_index) {
-				NetworkInterface* ni = ni_get(ni_index);
-				if(!ni)
-					return;
-
-				List* spd = spd_get(ni);
-				if(!spd) {
-					return;
-				}
-
-				ListIterator iter;
-				list_iterator_init(&iter, spd);
-				while(list_iterator_has_next(&iter)) {
-					SP* sp = list_iterator_next(&iter);
-					printf("eth%d -> ", ni_index);
-					dump_ni(sp->out_ni);
-					printf("\t");
-					dump_ipsec_action(sp->ipsec_action);
-					printf("/");
-					dump_direction(sp->direction);
-					printf("\t");
-					dump_protocol(sp->protocol);
-					printf("\t\t");
-					dump_addr(sp->src_ip);
-					printf("/");
-					printf("%d:%d\t", parse_mask(sp->src_mask), sp->src_port);
-					dump_addr(sp->dest_ip);
-					printf("/");
-					printf("%d:%d", parse_mask(sp->dest_mask), sp->dest_port);
-					printf("\n");
-
-					if(!sp->contents)
-						continue;
-
-					/*Content dump*/
-					ListIterator _iter;
-					list_iterator_init(&_iter, sp->contents);
-					while(list_iterator_has_next(&_iter)) {
-						printf("\t* ");
-						Content* content = list_iterator_next(&_iter);
-						dump_ipsec_protocol(content->ipsec_protocol);
-						printf(":");
-						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-							if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
-								crypto_algorithm_dump(((Content_ESP_Transport*)content)->crypto_algorithm);
-								printf("/");
-								auth_algorithm_dump(((Content_ESP_Transport*)content)->auth_algorithm);
-							} else {
-								crypto_algorithm_dump(((Content_ESP_Tunnel*)content)->crypto_algorithm);
-								printf("/");
-								auth_algorithm_dump(((Content_ESP_Tunnel*)content)->auth_algorithm);
-							}
+				/*Content dump*/
+				ListIterator _iter;
+				list_iterator_init(&_iter, sp->contents);
+				while(list_iterator_has_next(&_iter)) {
+					printf("\t* ");
+					Content* content = list_iterator_next(&_iter);
+					dump_ipsec_protocol(content->ipsec_protocol);
+					printf(":");
+					if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+						if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+							crypto_algorithm_dump(((Content_ESP_Transport*)content)->crypto_algorithm);
+							printf("/");
+							auth_algorithm_dump(((Content_ESP_Transport*)content)->auth_algorithm);
 						} else {
-							if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
-								auth_algorithm_dump(((Content_AH_Transport*)content)->auth_algorithm);
-
-							} else {
-								auth_algorithm_dump(((Content_AH_Tunnel*)content)->auth_algorithm);
-							}
+							crypto_algorithm_dump(((Content_ESP_Tunnel*)content)->crypto_algorithm);
+							printf("/");
+							auth_algorithm_dump(((Content_ESP_Tunnel*)content)->auth_algorithm);
 						}
-						printf("\t");
-						dump_ipsec_mode(content->ipsec_mode);
-						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-							if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
-								printf(":");
-								dump_addr(((Content_ESP_Tunnel*)content)->t_src_ip);
-								printf("-");
-								dump_addr(((Content_ESP_Tunnel*)content)->t_dest_ip);
-							}
+					} else {
+						if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+							auth_algorithm_dump(((Content_AH_Transport*)content)->auth_algorithm);
+
 						} else {
-							if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
-								printf(":");
-
-								dump_addr(((Content_AH_Tunnel*)content)->t_src_ip);
-								printf("-");
-								dump_addr(((Content_AH_Tunnel*)content)->t_dest_ip);
-							}
+							auth_algorithm_dump(((Content_AH_Tunnel*)content)->auth_algorithm);
 						}
-						printf("\n");
+					}
+					printf("\t");
+					dump_ipsec_mode(content->ipsec_mode);
+					if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+						if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+							printf(":");
+							dump_addr(((Content_ESP_Tunnel*)content)->t_src_ip);
+							printf("-");
+							dump_addr(((Content_ESP_Tunnel*)content)->t_dest_ip);
+						}
+					} else {
+						if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+							printf(":");
+
+							dump_addr(((Content_AH_Tunnel*)content)->t_src_ip);
+							printf("-");
+							dump_addr(((Content_AH_Tunnel*)content)->t_dest_ip);
+						}
 					}
 					printf("\n");
 				}
 				printf("\n");
 			}
+			printf("\n");
+		}
+		uint16_t count = ni_count();
+		if(argc == 2) {
+			for(int i = 0; i < count; i++) {
+				dump_spd(i, DIRECTION_OUT);
+				dump_spd(i, DIRECTION_IN);
+			}
+		} else if(argc == 3) {
 			i++;
-			uint16_t count = ni_count();
-			if(argc == 2) {
-				for(int i = 0; i < count; i++) {
-					dump_spd(i);
-				}
-			} else {
-				if(strncmp(argv[i], "eth", 3)) {
-					printf("Netowrk Interface number wrong\n");
-					return -2;
-				}
-				if(!is_uint16(argv[i] + 3)) {
-					printf("Netowrk Interface number wrong\n");
-					return -2;
-				}
-
-				uint16_t ni_index = parse_uint16(argv[i] + 3);
-				dump_spd(ni_index);
+			if(strncmp(argv[i], "eth", 3)) {
+				printf("Netowrk Interface number wrong\n");
+				return -2;
+			}
+			if(!is_uint16(argv[i] + 3)) {
+				printf("Netowrk Interface number wrong\n");
+				return -2;
 			}
 
-			return 0;
+			uint16_t ni_index = parse_uint16(argv[i] + 3);
+			dump_spd(ni_index, DIRECTION_OUT);
+			dump_spd(ni_index, DIRECTION_IN);
+
+		} else if(argc == 4) {
+			i++;
+			if(strncmp(argv[i], "eth", 3)) {
+				printf("Netowrk Interface number wrong\n");
+				return -2;
+			}
+			if(!is_uint16(argv[i] + 3)) {
+				printf("Netowrk Interface number wrong\n");
+				return -2;
+			}
+
+			uint16_t ni_index = parse_uint16(argv[i] + 3);
+			i++;
+			if(!strcmp(argv[i], "in")) {
+				dump_spd(ni_index, DIRECTION_IN);
+			} else if(!strcmp(argv[i], "out")){
+				dump_spd(ni_index, DIRECTION_OUT);
+			} else {
+				printf("Invalid Direction\n");
+				return i;
+			}
 		} else {
-			printf("Invalid Command\n");
+			printf("Invalid Value\n");
 			return -1;
 		}
+
+		return 0;
+	} else {
+		printf("Invalid Command\n");
+		return -1;
 	}
+
 	return 0;
 }
 
@@ -1282,9 +1310,18 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 				printf("Can'nt found Network Interface\n");
 			}
 			i++;
+			uint8_t direction = 0;
+			if(!strcmp(argv[i], "in")) {
+				direction = DIRECTION_IN;
+			} else if(!strcmp(argv[i], "out")) {
+				direction = DIRECTION_OUT;
+			} else {
+				printf("Direction wrong\n");
+				return -i;
+			}
+			i++;
 			uint8_t sp_index = parse_uint8(argv[i]);
-			
-			SP* sp = spd_get_sp_index(ni, sp_index);
+			SP* sp = spd_get_sp_index(ni, direction, sp_index);
 			if(!sp) {
 				printf("Can'nt found Security Policy\n");
 				return i;
