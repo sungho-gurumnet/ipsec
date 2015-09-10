@@ -30,12 +30,6 @@ static bool ipsec_decrypt(Packet* packet, SA* sa) {
 
 	// 2. Seq# Validation
 	ESP* esp = (ESP*)ip->body;
- //	if(checkWindow(sa->window, esp->seq_num) < 0) {
- //#ifdef DEBUG
- //		printf(" 2. Seq# Validation : Dicard Packet \n");
- //#endif
- //		return false;
- //	}
 
 	int size = endian16(ip->length) - (ip->ihl * 4) - ICV_LEN;
 	uint8_t result[12];
