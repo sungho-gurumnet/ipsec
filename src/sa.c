@@ -170,7 +170,7 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 							printf("Can'nt allocate key\n");
 							goto fail_key_alloc;
 						}
-						BF_set_key(bf_key, crypto_key_length * 8, (const unsigned char*)((SA_ESP*)sa)->crypto_key);
+						BF_set_key(bf_key, crypto_key_length, (const unsigned char*)((SA_ESP*)sa)->crypto_key);
 						((SA_ESP*)sa)->encrypt_key = bf_key;
 						((SA_ESP*)sa)->decrypt_key = bf_key;
 						break;
@@ -182,7 +182,7 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 							printf("Can'nt allocate key\n");
 							goto fail_key_alloc;
 						}
-						CAST_set_key(cast_key, crypto_key_length * 8, (const unsigned char*)((SA_ESP*)sa)->crypto_key);
+						CAST_set_key(cast_key, crypto_key_length, (const unsigned char*)((SA_ESP*)sa)->crypto_key);
 						((SA_ESP*)sa)->encrypt_key = cast_key;
 						((SA_ESP*)sa)->decrypt_key = cast_key;
 						break;
@@ -202,8 +202,8 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 							goto fail_key_alloc;
 						}
 						/*AES has diffrent key for encrypt and decrypt*/
-						AES_set_encrypt_key((const unsigned char*)((SA_ESP*)sa)->crypto_key, crypto_key_length * 8, encrypt_key);
-						AES_set_decrypt_key((const unsigned char*)((SA_ESP*)sa)->crypto_key, crypto_key_length * 8, decrypt_key);
+						AES_set_encrypt_key((const unsigned char*)((SA_ESP*)sa)->crypto_key, crypto_key_length, encrypt_key);
+						AES_set_decrypt_key((const unsigned char*)((SA_ESP*)sa)->crypto_key, crypto_key_length, decrypt_key);
 						((SA_ESP*)sa)->encrypt_key = encrypt_key;
 						((SA_ESP*)sa)->decrypt_key = decrypt_key;
 					case CRYPTO_CAMELLIA_CBC:
@@ -215,7 +215,7 @@ SA* sa_alloc(NetworkInterface* ni, uint64_t* attrs) {
 							__free(camellia_key, ni->pool);
 							goto fail_key_alloc;
 						}
-						Camellia_set_key((const unsigned char*)((SA_ESP*)sa)->crypto_key, crypto_key_length * 8, camellia_key);
+						Camellia_set_key((const unsigned char*)((SA_ESP*)sa)->crypto_key, crypto_key_length, camellia_key);
 						((SA_ESP*)sa)->encrypt_key = camellia_key;
 						((SA_ESP*)sa)->decrypt_key = camellia_key;
 					case CRYPTO_TWOFISH_CBC:
@@ -311,8 +311,8 @@ bool sa_free(SA* sa) {
 			__free(((SA_ESP*)sa)->auth_key, sa->ni->pool);
 		}
 	}
-	free(sa->window);
-	free(sa);
+	__free(sa->window, sa->ni->pool);
+	__free(sa, sa->ni->pool);
 
 	return true;
 }

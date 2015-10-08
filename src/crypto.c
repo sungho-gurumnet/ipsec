@@ -163,7 +163,7 @@ Cryptography cryptographys[] = {
 	{.encrypt = _cast128_cbc_encrypt, 	.decrypt = _cast128_cbc_decrypt},
 	{.encrypt = _des_deriv_encrypt, 	.decrypt = _des_deriv_decrypt},
 	{.encrypt = _3des_deriv_encrypt, 	.decrypt = _3des_deriv_decrypt},
-	{.encrypt = _rijndael_cbc_encrypt,  .decrypt = _rijndael_cbc_decrypt},
+	{.encrypt = _rijndael_cbc_encrypt, 	.decrypt = _rijndael_cbc_decrypt},
 	{.encrypt = _twofish_cbc_encrypt, 	.decrypt = _twofish_cbc_decrypt},
 	{.encrypt = _aes_ctr_encrypt,		.decrypt = _aes_ctr_decrypt},
 	{.encrypt = _camellia_cbc_encrypt, 	.decrypt = _camellia_cbc_decrypt},

@@ -4,9 +4,10 @@
 #undef DONT_MAKE_WRAPPER
 #include <util/map.h>
 
-#include "ipsec.h"
 #include "sp.h"
+#include "ipsec.h"
 #include "sad.h"
+#include "content.h"
 
 SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
         SP* sp = (SP*)__malloc(sizeof(SP), ni->pool);
@@ -15,6 +16,18 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
 		return NULL;
 	}
 	memset(sp, 0, sizeof(SP));
+	sp->ni = ni;
+	sp->contents = list_create(ni->pool);
+	if(!sp->contents) { 
+		__free(sp, ni->pool);
+		return NULL;
+	}
+	sp->sa_list = list_create(ni->pool);
+	if(!sp->sa_list) {
+		list_destroy(sp->contents);
+		__free(sp, ni->pool);
+		return NULL;
+	}
 
 	for(int i = 0; attrs[i * 2] != SP_NONE; i++) {
 		switch(attrs[i * 2]) {
@@ -66,8 +79,6 @@ SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs) {
 		}
 	}
 
-	sp->ni = ni;
-
 	return sp;
 }
 
@@ -75,12 +86,14 @@ bool sp_free(SP* sp) {
 	if(sp->sa_list)
 		list_destroy(sp->sa_list);
 
-	if(sp->contents) {
-		if(!list_is_empty(sp->contents))
-			return false;
-
-		list_destroy(sp->contents);
+	ListIterator iter;
+	list_iterator_init(&iter, sp->contents);
+	while(list_iterator_has_next(&iter)) {
+		Content* content = list_iterator_remove(&iter);
+		content_free(content);
 	}
+
+	list_destroy(sp->contents);
 
 	__free(sp, sp->ni->pool);
 
@@ -88,75 +101,33 @@ bool sp_free(SP* sp) {
 }
 
 bool sp_add_content(SP* sp, Content* content, int priority) {
-	if(!sp->contents) {
-		sp->contents = list_create(sp->ni->pool);
-		if(!sp->contents) {
-			printf("Can'nt allocate contents list\n");
-			return false;
-		}
-	}
-	if(!list_add_at(sp->contents, priority, content)) {
-		if(list_is_empty(sp->contents)) {
-			list_destroy(sp->contents);
-			sp->contents = NULL;
-		}
-
-		return false;
-	}
-
-	return true;
+	return list_add_at(sp->contents, priority, content);
 }
 
 Content* sp_get_content(SP* sp, int index) {
-	if(!sp->contents)
-		return NULL;
-
 	Content* content = list_get(sp->contents, index);
 
 	return content;
 }
 
-Content* sp_remove_content(SP* sp, int index) {
-	if(!sp->contents)
-		return NULL;
-
+bool sp_remove_content(SP* sp, int index) {
 	Content* content = list_remove(sp->contents, index);
-	if(!content)
-		return NULL;
 
-	if(list_is_empty(sp->contents)) {
-		list_destroy(sp->contents);
-		sp->contents = NULL;
-	}
-
-	return content;
+	if(content) {
+		content_free(content);
+		return true;
+	} else
+		return false;
 }
 
 bool sp_add_sa(SP* sp, SA* sa) {
-	if(!sp->sa_list) {
-		sp->sa_list = list_create(sp->ni->pool);
-	}
-	if(!sp->sa_list)
-		return false;
-
 	return list_add(sp->sa_list, sa);
 }
 
 bool sp_remove_sa(SP* sp, SA* sa) {
-	if(!sp->sa_list)
-		return false;
-
-	if(!list_remove_data(sp->sa_list, sa)) {
-		return false;
-	}
-
-	if(list_is_empty(sp->sa_list)) {
-		list_destroy(sp->sa_list);
-		sp->sa_list = NULL;
-	}
-
-	return true;
+	return list_remove_data(sp->sa_list, sa);
 }
+
 //TODO
 SA* sp_get_sa(SP* sp, IP* ip) {
 	if(!sp->sa_list)
@@ -270,13 +241,8 @@ SA* sp_get_sa(SP* sp, IP* ip) {
 SA* sp_find_sa(SP* sp, IP* ip) {
 	SA* first_sa = NULL;
 	SA* pre_sa = NULL;
-	Map* sad = sad_get(sp->ni);
 
-	if(!sp->contents)
-		return NULL;
-
-	if(!sad)
-		return NULL;
+	SAD* sad = sad_get(sp->ni);
 
 	ListIterator iter;
 	list_iterator_init(&iter, sp->contents);
@@ -285,7 +251,7 @@ SA* sp_find_sa(SP* sp, IP* ip) {
 		Content* content = list_iterator_next(&iter);
 
 		MapIterator sad_iter;
-		map_iterator_init(&sad_iter, sad);
+		map_iterator_init(&sad_iter, sad->database);
 		while(map_iterator_has_next(&sad_iter)) {
 			MapEntry* entry = map_iterator_next(&sad_iter);
 			List* dest_list = entry->data;
@@ -395,13 +361,7 @@ next:
 			pre_sa = next_sa;
 		}
 	}
-
-	if(!sp->sa_list)
-		sp->sa_list = list_create(sp->ni->pool);
-
-	if(sp->sa_list) {
-		list_add(sp->sa_list, first_sa);
-	}
+	//sp_add_sa(sp, first_sa);
 
 	return first_sa;
 }

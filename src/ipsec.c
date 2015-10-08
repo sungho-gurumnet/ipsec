@@ -18,8 +18,20 @@
 #define DEBUG	0
 
 bool ipsec_init() {
-	printf("PacketNgin IPSec\n");
-	printf("Start\n");
+	printf("PacketNgin IPSec\n\n");
+	printf("Initialize SAD...\n");
+	if(!sad_init()) {
+		printf("Initializing SAD is fail!!!\n");
+		return false;
+	}
+	printf("SAD initialized\n\n");
+	printf("Initialize SPD...\n");
+	if(!spd_init()) {
+		printf("Initializing SPD is fail!!!\n");
+		return false;
+	}
+	printf("SPD initialized\n\n");
+	printf("PacketNgin IPSec Start\n");
 
 	return true;
 }
@@ -245,14 +257,17 @@ static bool inbound_process(Packet* packet) {
 	Ether* ether = (Ether*)(packet->buffer + packet->start);
         IP* ip = (IP*)ether->payload;
 
-	List* sa_list = list_create(packet->ni->pool);
+	NetworkInterface* ni = packet->ni;
+	List* sa_list = list_create(ni->pool);
 	SA* sa = NULL;
+	spd_inbound_rlock(ni);
+	sad_rlock(ni);
 	while((ip->protocol == IP_PROTOCOL_ESP) || (ip->protocol == IP_PROTOCOL_AH)) {
 		switch(ip->protocol) {
 			case IP_PROTOCOL_ESP:
 				;
 				ESP* esp = (ESP*)ip->body;
-				sa = sad_get_sa(packet->ni, endian32(esp->spi), endian32(ip->destination), ip->protocol);
+				sa = sad_get_sa(ni, endian32(esp->spi), endian32(ip->destination), ip->protocol);
 				if(!sa) {
 #if DEBUG
 					printf("Can'nt found SA\n");
@@ -267,7 +282,7 @@ static bool inbound_process(Packet* packet) {
 			case IP_PROTOCOL_AH:
 				;
 				AH* ah = (AH*)ip->body;
-				sa = sad_get_sa(packet->ni, endian32(ah->spi), endian32(ip->destination), ip->protocol);
+				sa = sad_get_sa(ni, endian32(ah->spi), endian32(ip->destination), ip->protocol);
 				if(!sa) {
 #if DEBUG
 					printf("Can'nt found SA\n");
@@ -286,7 +301,7 @@ static bool inbound_process(Packet* packet) {
 	}
 
 	// 6. SPD Lookup 
-	SP* sp = spd_get_sp(packet->ni, DIRECTION_IN, ip);
+	SP* sp = spd_get_sp(ni, DIRECTION_IN, ip);
 	if(!sp) {
 #if DEBUG
 		printf("Can'nt found SP\n");
@@ -307,11 +322,15 @@ static bool inbound_process(Packet* packet) {
 	ether->type = endian16(ETHER_TYPE_IPv4);
 
 	ni_output(sp->out_ni, packet);
+	spd_inbound_un_rlock(ni);
+	sad_un_rlock(ni);
 	list_destroy(sa_list);
 
 	return true;
 
 error:
+	spd_inbound_un_rlock(ni);
+	sad_un_rlock(ni);
 	ni_free(packet);
 	list_destroy(sa_list);
 
@@ -329,6 +348,9 @@ static bool outbound_process(Packet* packet) {
 	Socket* socket = NULL;
 	SP* sp = NULL;
 	SA* sa = NULL;
+
+	spd_outbound_rlock(ni);
+	sad_rlock(ni);
 	if(ip->protocol == IP_PROTOCOL_TCP) { //tcp use socket pointer 
 		TCP* tcp = (TCP*)ip->body;
 		socket = socket_get(ni, endian32(ip->source), endian16(tcp->source));
@@ -356,8 +378,10 @@ static bool outbound_process(Packet* packet) {
 
 	if(!sp) {
 #if DEBUG
-		printf("Can'nt found sp\n");
+		printf("Can't found sp\n");
 #endif
+		spd_outbound_un_rlock(ni);
+		sad_un_rlock(ni);
 		return false;
 	}
 
@@ -371,6 +395,9 @@ tcp_packet:
 		
 		//set dmac
 		ni_output(sp->out_ni, packet);
+		spd_outbound_un_rlock(ni);
+		sad_un_rlock(ni);
+
 		return true;
 	}
 
@@ -402,9 +429,12 @@ tcp_packet:
 
 	if(!sa) {
 		ni_free(packet);
+		spd_outbound_un_rlock(ni);
+		sad_un_rlock(ni);
 #if DEBUG
 		printf("Can'nt found SA\n");
 #endif
+
 		return true;
 	}
 
@@ -421,6 +451,8 @@ tcp_packet:
 
 		if(!sa) {
 			ni_free(packet);
+			spd_outbound_un_rlock(ni);
+			sad_un_rlock(ni);
 #if DEBUG
 			printf("Can'nt found SA\n");
 #endif
@@ -430,20 +462,24 @@ tcp_packet:
 		switch(content->ipsec_protocol) {
 			case IP_PROTOCOL_ESP:
 				if(!ipsec_encrypt(packet, content, sa)) {
+					ni_free(packet);
+					spd_outbound_un_rlock(ni);
+					sad_un_rlock(ni);
 #if DEBUG
 					printf("Can'nt encrypt packet\n");
 #endif
-					ni_free(packet);
 					return true;
 				}
 				break;
 
 			case IP_PROTOCOL_AH:
 				if(!ipsec_auth(packet, content, sa)) {
+					ni_free(packet);
+					spd_outbound_un_rlock(ni);
+					sad_un_rlock(ni);
 #if DEBUG
 					printf("Can'nt authenticate packet\n");
 #endif
-					ni_free(packet);
 					return true;
 				}
 				break;
@@ -459,6 +495,8 @@ tcp_packet:
 	ether->type = endian16(ETHER_TYPE_IPv4);
 
 	ni_output(sp->out_ni, packet);
+	spd_outbound_un_rlock(ni);
+	sad_un_rlock(ni);
 
 	return true;
 }

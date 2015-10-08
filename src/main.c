@@ -21,13 +21,12 @@
 #include <util/types.h>
 
 #include "sp.h"
-
 #include "crypto.h"
 #include "auth.h"
 #include "sad.h"
 #include "spd.h"
-
 #include "ipsec.h"
+#include "rwlock.h"
 
 static bool is_continue;
 
@@ -171,51 +170,24 @@ static void auth_algorithm_dump(uint8_t auth_algorithm) {
 static bool parse_addr(char* argv, uint32_t* address) {
 	char* next = NULL;
 	uint32_t temp;
-	temp = strtol(argv, &next, 0);
-	if(temp > 0xff)
-		return false;
 
-	*address = (temp & 0xff) << 24;
-	if(next == argv)
-		return false;
-	argv = next;
+	for(int i = 0; i < 4; i++) {
+		temp = strtol(argv, &next, 0);
+		if(temp > 0xff)
+			return false;
 
-	if(*argv != '.')
-		return false;
-	argv++;
-	temp = strtol(argv, &next, 0);
-	if(temp > 0xff)
-		return false;
+		*address = (temp & 0xff) << ((3 - i) * 8);
+		if(next == argv)
+			return false;
+		argv = next;
 
-	*address |= (temp & 0xff) << 16;
-	if(next == argv)
-		return false;
-	argv = next;
+		if(i != 3 && *argv != '.')
+			return false;
+		else if(i == 3 && *argv != '\0')
+			return false;
 
-	if(*argv != '.')
-		return false;
-	argv++;
-	temp = strtol(argv, &next, 0);
-	if(temp > 0xff)
-		return false;
-	*address |= (temp & 0xff) << 8;
-	if(next == argv)
-		return false;
-	argv = next;
-
-	if(*argv != '.')
-		return false;
-	argv++;
-	temp = strtol(argv, &next, 0);
-	if(temp > 0xff)
-		return false;
-	*address |= temp & 0xff;
-	if(next == argv)
-		return false;
-	argv = next;
-
-	if(*argv != '\0')
-		return false;
+		argv++;
+	}
 
 	return true;
 }
@@ -226,40 +198,51 @@ static bool parse_key(NetworkInterface* ni, char* argv, uint64_t** key, uint16_t
 	}
 
 	ssize_t length = strlen(argv) - 2;
-	length /= 2;
-	//check keylength
-	if(length > key_length)
+	length = (length / 2) + (length % 2);
+	if(length > key_length) {
 		return false;
+	}
 
 	*key = __malloc(key_length, ni->pool);
 	if(!(*key)) {
-		printf("Can'nt allocate key\n");
 		return false;
 	}
 	memset(*key, 0, key_length);
 
-	uint8_t* _key = (uint8_t*)*key;
+	uint8_t* _key = (uint8_t*)*key + length;
 
 	char buf[5];
 	strcpy(buf, "0x00");
-	for(int  i = 0; i < length; i++) {
-		memcpy(buf + 2, argv + i * 2 + 2, 2);
+	for(int  i = strlen(argv) - 2; i >= 2; i -= 2) {
+		memcpy(buf + 2, argv + i, 2);
+		if(!is_uint8(buf)) {
+			__free(key, ni->pool);
+			return false;
+		}
+
+		_key--;
+
 		uint8_t value = parse_uint8(buf);
 		*_key = value;
-		_key++;
 	}
 
+	memset(buf, 0, 5);
 	if(!!((strlen(argv) - 2) % 2)) {
 		strcpy(buf, "0x0");
-		memcpy(buf + 2, argv + strlen(argv) - 1, 1);
+		memcpy(buf + 2, argv + 2, 1);
+		if(!is_uint8(buf)) {
+			__free(key, ni->pool);
+			return false;
+		}
 		uint8_t value = parse_uint8(buf);
+		_key--;
 		*_key = value;
 	}
 
 	return true;
 }
 
-static void key_dump(uint64_t* _key, uint16_t key_length) {
+void key_dump(uint64_t* _key, uint16_t key_length) {
 	uint8_t* key = (uint8_t*)_key;
 	printf("0x");
 	for(int i = 0; i < key_length; i++) {
@@ -294,22 +277,42 @@ static bool parse_addr_mask_port(char* argv, uint32_t* addr, uint32_t* mask, uin
 	*mask = 0xffffffff;
 	*port = 0;
 
-	char* next = argv;
-	*addr = (strtol(next, &next, 0) & 0xff) << 24; next++;
-	*addr |= (strtol(next, &next, 0) & 0xff) << 16; next++;
-	*addr |= (strtol(next, &next, 0) & 0xff) << 8; next++;
-	*addr |= strtol(next, &next, 0) & 0xff;
-	if(*next == '/') {
-		next++;
-		uint8_t _mask = strtol(next, &next, 0);
+	char* next = NULL;
+	uint32_t temp;
+	for(int i = 0; i < 4; i++, argv++) {
+		temp = strtol(argv, &next, 0);
+		if(temp > 0xff)
+			return false;
+
+		if(next == argv)
+			return false;
+
+		if(i != 3 && *next != '.')
+			return false;
+
+		*addr |= (temp & 0xff) << ((3 - i) * 8);
+		argv = next;
+	}
+
+	argv--;
+
+	if(*argv == '/') {
+		argv++;
+		uint8_t _mask = strtol(argv, &next, 0);
+		if(next == argv)
+			return false;
+
 		if(_mask > 32)
 			return false;
 
+		argv = next;
 		*mask = *mask << (32 - _mask);
 	}
-	if(*next == ':') {
-		next++;
-		*port = strtol(next, &next, 0);
+	if(*argv == ':') {
+		argv++;
+		*port = strtol(argv, &next, 0);
+		if(next == argv)
+			return false;
 	}
 
 	if(*next != '\0') {
@@ -452,6 +455,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 			if(!ni) {
 				printf("Can'nt found Network Interface\n");
 			}
+			i++;
 
 			uint32_t ipsec_mode = IPSEC_MODE_TRANSPORT;
 			uint32_t t_src_ip = 0;
@@ -472,7 +476,6 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 			uint64_t* auth_key = NULL;
 			uint16_t auth_key_length = 0;
 
-			i++;
 			for(; i < argc; i++) {
 				if(!strcmp(argv[i], "-m")) {
 					i++;
@@ -489,7 +492,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						t_src_ip |= strtol(next, &next, 0) & 0xff;
 
 						if(*next != '-') {
-							printf("Wrong parameter\n");
+							printf("Parameter is wrong\n");
 							return i;
 						}
 						next++;
@@ -516,19 +519,19 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				} else if(!strcmp(argv[i], "-s")) {
 					i++;
 					if(!parse_addr_mask_port(argv[i], &src_ip, &src_mask, &src_port)) {
-						printf("Wrong source parameter\n");
+						printf("Source parameter is wrong\n");
 						return false;
 					}
 				} else if(!strcmp(argv[i], "-d")) {
 					i++;
 					if(!parse_addr_mask_port(argv[i], &dest_ip, &dest_mask, &dest_port)) {
-						printf("Wrong destination parameter\n");
+						printf("Destination parameter is wrong\n");
 						return false;
 					}
 				} else if(!strcmp(argv[i], "-spi")) {
 					i++;
 					if(!is_uint32(argv[i])) {
-						printf("Wrong spi\n");
+						printf("SPI is wrong\n");
 						return i;
 					}
 					spi = parse_uint32(argv[i]);
@@ -540,7 +543,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						crypto_key_length = 8;	//8bytes;
 						i++;
 						if(!parse_key(ni, argv[i], &crypto_key, 8)) {
-							printf("Wrong crypto key\n");
+							printf("Crypto key is wrong\n");
 							return i;
 						}
 					} else if(!strcmp(argv[i], "3des_cbc")) {
@@ -587,7 +590,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 
 						crypto_key_length = strlen(argv[i]) - 2;
 						crypto_key_length = crypto_key_length / 2 + !!(crypto_key_length % 2);
-						if(crypto_key_length > 56) {
+						if(crypto_key_length > 16) {
 							printf("Wrong key length\n");
 							return i;
 						}
@@ -783,66 +786,72 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				return -1;
 			}
 
+			sad_wlock(ni);
 			if(!sad_add_sa(ni, sa)) {
 				printf("Can'nt add SA\n");
 				return -1;
 			}
+			sad_un_wlock(ni);
 			printf("Security Association added\n");
-
- //			if(sad_add_sa(ni, sa)) {
- //				SP* sp = spd_get_index(ni, 0);
- //				sp_sa_add(sp, sa, OUT);
- //				return 0;
- //			} else {
- //				printf("can't add to SAD\n");
- //				return -1;
- //			}
 
 			return 0;
 		} else if(!strcmp(argv[i], "remove")) {
- //			i++;
- //
- //			uint32_t dest_ip = 0;
- //			uint8_t protocol = 0;
- //			uint32_t spi = 0;
- //
- //			for(; i < argc; i++) {
- //				if(!strcmp(argv[i], "dest_ip:")) {
- //					i++;
- //					if(!is_uint32(argv[i])) {
- //						printf("dest_ip is must be uint32\n");
- //						return i;
- //					}
- //
- //					dest_ip = parse_uint32(argv[i]);
- //				} else if(!strcmp(argv[i], "protocol:")) {
- //					i++;
- //					if(!is_uint8(argv[i])) {
- //						printf("protocol is must be uint32\n");
- //						return i;
- //					}
- //
- //					protocol = parse_uint8(argv[i]);
- //				} else if(!strcmp(argv[i], "spi:")) {
- //					i++;
- //					if(!is_uint32(argv[i])) {
- //						printf("spi is must be uint32\n");
- //						return i;
- //					}
- //
- //					spi = parse_uint32(argv[i]);
- //				} else {
- //					printf("Invalid Value\n");
- //					return i;
- //				}
- //			}
- //
- //			SA* sa = sad_sa_get(spi, dest_ip, protocol);
- //			if(sa == NULL)
- //				return -1;
- //
- //			sad_sa_remove(sa);
- //
+			i++;
+
+			NetworkInterface* ni = parse_ni(argv[i]);
+			if(!ni) {
+				printf("Can'nt found Network Interface\n");
+			}
+			i++;
+
+			uint32_t dest_ip = 0;
+			uint32_t dest_mask = 0;
+			uint16_t dest_port = 0;
+			uint8_t protocol = 0;
+			uint32_t spi = 0;
+
+			for(; i < argc; i++) {
+				if(!strcmp(argv[i], "-d")) {
+					i++;
+					if(!parse_addr_mask_port(argv[i], &dest_ip, &dest_mask, &dest_port)) {
+						printf("Wrong destination parameter\n");
+						return i;
+					}
+				} else if(!strcmp(argv[i], "-p")) {
+					i++;
+					if(!strcmp(argv[i], "tcp")) {
+						protocol = IP_PROTOCOL_TCP;
+					} else if(!strcmp(argv[i], "udp")) {
+						protocol = IP_PROTOCOL_UDP;
+					} else if(!strcmp(argv[i], "icmp")) {
+						protocol = IP_PROTOCOL_ICMP;
+					} else if(!strcmp(argv[i], "any")){
+						protocol = IP_PROTOCOL_ANY;
+					} else 
+						return i;
+				} else if(!strcmp(argv[i], "-spi")) {
+					i++;
+					if(!is_uint32(argv[i])) {
+						printf("Wrong spi\n");
+						return i;
+					}
+					spi = parse_uint32(argv[i]);
+				} else {
+					printf("Invalid Value\n");
+					return i;
+				}
+			}
+
+			bool result;
+			sad_wlock(ni);
+			result = sad_remove_sa(ni, spi, dest_ip, protocol);
+			sad_un_wlock(ni);
+
+			if(result)
+				printf("SA is removed\n");
+			else
+				printf("Removing SA is failed\n");
+
 			return 0;
 		} else if(!strcmp(argv[i], "list")) {
 			printf("********SAD********\n");
@@ -873,12 +882,11 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 				if(!ni)
 					return;
 
-				Map* sad = sad_get(ni);
-				if(!sad)
-					return;
+				SAD* sad = sad_get(ni);
+				sad_rlock(ni);
 
 				MapIterator iter;
-				map_iterator_init(&iter, sad);
+				map_iterator_init(&iter, sad->database);
 				while(map_iterator_has_next(&iter)) {
 					MapEntry* entry = map_iterator_next(&iter);
 					List* dest_list = entry->data;
@@ -928,6 +936,7 @@ static int cmd_sa(int argc, char** argv, void(*callback)(char* result, int exit_
 						printf("\n");
 					}
 				}
+				sad_un_rlock(ni);
 			}
 
 			i++;
@@ -967,6 +976,7 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 		if(!ni) {
 			printf("Can'nt found Network Interface\n");
 		}
+		i++;
 
 		uint8_t protocol = IP_PROTOCOL_ANY;
 		bool is_protocol_sa_share = true;
@@ -986,8 +996,6 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 		uint8_t index = 0;
 
 		NetworkInterface* out_ni = NULL;
-
-		i++;
 		for(; i < argc; i++) {
 			if(!strcmp(argv[i], "-p")) { //protocol
 				i++;
@@ -1103,7 +1111,54 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 		printf("Security Policy added\n");
 		return 0;
 	} else if(!strcmp(argv[i], "remove")) {
-		//Not yet
+		i++;
+		NetworkInterface* ni = parse_ni(argv[i]);
+		if(!ni) {
+			printf("Can'nt found Network Interface\n");
+		}
+		i++;
+
+		uint8_t direction = 0;
+		uint16_t index = 0;
+
+		if(!strcmp(argv[i], "-direction")) {
+			i++;
+			if(!strcmp(argv[i], "in")) {
+				direction = DIRECTION_IN;
+			} else if(!strcmp(argv[i], "out")) {
+				direction = DIRECTION_OUT;
+			} else {
+				printf("Invalid direction\n");
+				return i;
+			}
+		} else if(!strcmp(argv[i], "-i")) {
+			i++;
+			if(!is_uint8(argv[i])) {
+				printf("index is must be uint8\n");
+				return i;
+			}
+			index = parse_uint8(argv[i]);
+		}
+
+		bool result = false;
+		switch(direction) {
+			case DIRECTION_IN:
+				spd_inbound_wlock(ni);
+				result = spd_remove_sp(ni, direction, index);
+				spd_inbound_un_wlock(ni);
+				break;
+			case DIRECTION_OUT:
+				spd_outbound_wlock(ni);
+				result = spd_remove_sp(ni, direction, index);
+				spd_outbound_un_wlock(ni);
+				break;
+		}
+
+		if(result)
+			printf("SP is removed\n");
+		else
+			printf("Removing SP is failed\n");
+
 		return 0;
 	} else if(!strcmp(argv[i], "list")) {
 		i++;
@@ -1166,83 +1221,90 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 			if(!ni)
 				return;
 
-			List* spd = spd_get(ni, direction);
-			if(!spd) {
-				return;
-			}
-
-			ListIterator iter;
-			list_iterator_init(&iter, spd);
-			while(list_iterator_has_next(&iter)) {
-				SP* sp = list_iterator_next(&iter);
-				printf("eth%d -> ", ni_index);
-				dump_ni(sp->out_ni);
-				printf("\t");
-				dump_ipsec_action(sp->ipsec_action);
-				printf("/");
-				dump_direction(sp->direction);
-				printf("\t");
-				dump_protocol(sp->protocol);
-				printf("\t\t");
-				dump_addr(sp->src_ip);
-				printf("/");
-				printf("%d:%d\t", parse_mask(sp->src_mask), sp->src_port);
-				dump_addr(sp->dest_ip);
-				printf("/");
-				printf("%d:%d", parse_mask(sp->dest_mask), sp->dest_port);
-				printf("\n");
-
-				if(!sp->contents)
-					continue;
-
-				/*Content dump*/
-				ListIterator _iter;
-				list_iterator_init(&_iter, sp->contents);
-				while(list_iterator_has_next(&_iter)) {
-					printf("\t* ");
-					Content* content = list_iterator_next(&_iter);
-					dump_ipsec_protocol(content->ipsec_protocol);
-					printf(":");
-					if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-						if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
-							crypto_algorithm_dump(((Content_ESP_Transport*)content)->crypto_algorithm);
-							printf("/");
-							auth_algorithm_dump(((Content_ESP_Transport*)content)->auth_algorithm);
-						} else {
-							crypto_algorithm_dump(((Content_ESP_Tunnel*)content)->crypto_algorithm);
-							printf("/");
-							auth_algorithm_dump(((Content_ESP_Tunnel*)content)->auth_algorithm);
-						}
-					} else {
-						if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
-							auth_algorithm_dump(((Content_AH_Transport*)content)->auth_algorithm);
-
-						} else {
-							auth_algorithm_dump(((Content_AH_Tunnel*)content)->auth_algorithm);
-						}
-					}
+			void dump_database(List* database) {
+				ListIterator iter;
+				list_iterator_init(&iter, database);
+				while(list_iterator_has_next(&iter)) {
+					SP* sp = list_iterator_next(&iter);
+					printf("eth%d -> ", ni_index);
+					dump_ni(sp->out_ni);
 					printf("\t");
-					dump_ipsec_mode(content->ipsec_mode);
-					if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
-						if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
-							printf(":");
-							dump_addr(((Content_ESP_Tunnel*)content)->t_src_ip);
-							printf("-");
-							dump_addr(((Content_ESP_Tunnel*)content)->t_dest_ip);
-						}
-					} else {
-						if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
-							printf(":");
+					dump_ipsec_action(sp->ipsec_action);
+					printf("/");
+					dump_direction(sp->direction);
+					printf("\t");
+					dump_protocol(sp->protocol);
+					printf("\t\t");
+					dump_addr(sp->src_ip);
+					printf("/");
+					printf("%d:%d\t", parse_mask(sp->src_mask), sp->src_port);
+					dump_addr(sp->dest_ip);
+					printf("/");
+					printf("%d:%d", parse_mask(sp->dest_mask), sp->dest_port);
+					printf("\n");
 
-							dump_addr(((Content_AH_Tunnel*)content)->t_src_ip);
-							printf("-");
-							dump_addr(((Content_AH_Tunnel*)content)->t_dest_ip);
+					if(!sp->contents)
+						continue;
+
+					/*Content dump*/
+					ListIterator _iter;
+					list_iterator_init(&_iter, sp->contents);
+					while(list_iterator_has_next(&_iter)) {
+						printf("\t* ");
+						Content* content = list_iterator_next(&_iter);
+						dump_ipsec_protocol(content->ipsec_protocol);
+						printf(":");
+						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+							if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+								crypto_algorithm_dump(((Content_ESP_Transport*)content)->crypto_algorithm);
+								printf("/");
+								auth_algorithm_dump(((Content_ESP_Transport*)content)->auth_algorithm);
+							} else {
+								crypto_algorithm_dump(((Content_ESP_Tunnel*)content)->crypto_algorithm);
+								printf("/");
+								auth_algorithm_dump(((Content_ESP_Tunnel*)content)->auth_algorithm);
+							}
+						} else {
+							if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+								auth_algorithm_dump(((Content_AH_Transport*)content)->auth_algorithm);
+
+							} else {
+								auth_algorithm_dump(((Content_AH_Tunnel*)content)->auth_algorithm);
+							}
 						}
+						printf("\t");
+						dump_ipsec_mode(content->ipsec_mode);
+						if(content->ipsec_protocol == IP_PROTOCOL_ESP) {
+							if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+								printf(":");
+								dump_addr(((Content_ESP_Tunnel*)content)->t_src_ip);
+								printf("-");
+								dump_addr(((Content_ESP_Tunnel*)content)->t_dest_ip);
+							}
+						} else {
+							if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+								printf(":");
+
+								dump_addr(((Content_AH_Tunnel*)content)->t_src_ip);
+								printf("-");
+								dump_addr(((Content_AH_Tunnel*)content)->t_dest_ip);
+							}
+						}
+						printf("\n");
 					}
 					printf("\n");
 				}
-				printf("\n");
 			}
+
+			SPD* spd = spd_get(ni);
+			spd_outbound_rlock(ni);
+			dump_database(spd->out_database);
+			spd_outbound_un_rlock(ni);
+
+			spd_inbound_rlock(ni);
+			dump_database(spd->in_database);
+			spd_inbound_un_rlock(ni);
+
 			printf("\n");
 		}
 		uint16_t count = ni_count();
@@ -1357,7 +1419,7 @@ static int cmd_content(int argc, char** argv, void(*callback)(char* result, int 
 						src_ip |= strtol(next, &next, 0) & 0xff;
 
 						if(*next != '-') {
-							printf("Wrong parameter\n");
+							printf("Parameter is wrong\n");
 							return i;
 						}
 						next++;
@@ -1557,9 +1619,7 @@ int main(int argc, char** argv) {
 	}
 
 	thread_barrior();
-
 	init(argc, argv);
-
 	thread_barrior();
 
 	uint32_t count = ni_count();

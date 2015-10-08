@@ -1,5 +1,10 @@
 #include <stdio.h>
+
 #include <stdint.h>
+#include <malloc.h>
+#define DONT_MAKE_WRAPPER
+#include <_malloc.h>
+#undef DONT_MAKE_WRAPPER
 #include <net/ether.h>
 #include <net/ip.h>
 #include <net/tcp.h>
@@ -8,54 +13,122 @@
 
 #include "spd.h"
 #include "sp.h"
+#include "rwlock.h"
 
-List* spd_get(NetworkInterface* ni, uint8_t direction) {
-	List* spd = NULL;
+bool spd_init() {
+	int count = ni_count();
 
-	switch(direction) {
-		case DIRECTION_IN:
-			spd = ni_config_get(ni, SPD_IN);
-			break;
-		case DIRECTION_OUT:
-			spd = ni_config_get(ni, SPD_OUT);
-			break;
+	for(int i = 0; i < count; i++) {
+		NetworkInterface* ni = ni_get(i);
+		SPD* spd = __malloc(sizeof(SPD), ni->pool);
+		if(!spd) {
+			printf("Can't create SPD\n");
+			goto fail;
+		}
+
+		spd->out_database = list_create(ni->pool);
+		if(!spd->out_database) {
+			__free(spd, ni->pool);
+			printf("Can't create SPD Outbound Database\n");
+			goto fail;
+		}
+		spd->out_rwlock = __malloc(sizeof(RWLock), ni->pool);
+		if(!spd->out_rwlock) {
+			list_destroy(spd->out_database);
+			__free(spd, ni->pool);
+			printf("Can't create SPD Outbound RWLock\n");
+			goto fail;
+		}
+		rwlock_init(spd->out_rwlock);
+
+		spd->in_database = list_create(ni->pool);
+		if(!spd->in_database) {
+			__free(spd->out_rwlock, ni->pool);
+			list_destroy(spd->out_database);
+			__free(spd, ni->pool);
+			printf("Can't create SPD Outbound Database\n");
+			goto fail;
+		}
+		spd->in_rwlock = __malloc(sizeof(RWLock), ni->pool);
+		if(!spd->in_rwlock) {
+			list_destroy(spd->in_database);
+			__free(spd->out_rwlock, ni->pool);
+			list_destroy(spd->out_database);
+			__free(spd, ni->pool);
+			printf("Can't create SPD Outbound RWLock\n");
+			goto fail;
+		}
+		rwlock_init(spd->in_rwlock);
+
+		if(!ni_config_put(ni, IPSEC_SPD, spd)) {
+			__free(spd->in_rwlock, ni->pool);
+			list_destroy(spd->in_database);
+			__free(spd->out_rwlock, ni->pool);
+			list_destroy(spd->out_database);
+			__free(spd, ni->pool);
+			printf("Can't add SPD Outbound\n");
+			goto fail;
+		}
 	}
 
-	return spd;
+	return true;
+
+fail:
+	for(int i = 0; i < count; i++) {
+		NetworkInterface* ni = ni_get(i);
+		SPD* spd = ni_config_get(ni, IPSEC_SPD);
+		if(!spd)
+			continue;
+
+		list_destroy(spd->out_database);
+		__free(spd->out_rwlock, ni->pool);
+		list_destroy(spd->in_database);
+		__free(spd->in_rwlock, ni->pool);
+
+		ni_config_remove(ni, IPSEC_SPD);
+	}
+
+	return false;
+}
+
+SPD* spd_get(NetworkInterface* ni) {
+	return ni_config_get(ni, IPSEC_SPD);
 }
 
 SP* spd_get_sp_index(NetworkInterface* ni, uint8_t direction, uint16_t index) {
-	List* spd = NULL;
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	SP* sp = NULL;
 	switch(direction) {
-		case DIRECTION_IN:
-			spd = ni_config_get(ni, SPD_IN);
-			break;
 		case DIRECTION_OUT:
-			spd = ni_config_get(ni, SPD_OUT);
+			;
+			sp = list_get(spd->out_database, index);
+
+			break;
+		case DIRECTION_IN:
+			;
+			sp = list_get(spd->in_database, index);
+
 			break;
 	}
-	if(!spd)
-		return NULL;
 
-	return list_get(spd, index);
+	return sp;
 }
 
 SP* spd_get_sp(NetworkInterface* ni, uint8_t direction, IP* ip) {
-	List* spd = NULL;
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	List* database = NULL;
 	switch(direction) {
-		case DIRECTION_IN:
-			spd = ni_config_get(ni, SPD_IN);
-			break;
 		case DIRECTION_OUT:
-			spd = ni_config_get(ni, SPD_OUT);
+			database = spd->out_database;
+			break;
+		case DIRECTION_IN:
+			database = spd->in_database;
 			break;
 	}
-	if(!spd)
-		return NULL;
 
 	ListIterator iter;
-	list_iterator_init(&iter, spd);
-	
+
+	list_iterator_init(&iter, database);
 	while(list_iterator_has_next(&iter)) {
 		SP* sp = list_iterator_next(&iter);
 		if(sp->protocol && (ip->protocol != sp->protocol))
@@ -93,99 +166,118 @@ SP* spd_get_sp(NetworkInterface* ni, uint8_t direction, IP* ip) {
 				return sp;
 		}
 	}
+
 	return NULL;
 }
 
 bool spd_add_sp(NetworkInterface* ni, uint8_t direction, SP* sp, int priority) {
-	List* spd = NULL;
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	List* database = NULL;
 	switch(direction) {
-		case DIRECTION_IN:
-			spd = ni_config_get(ni, SPD_IN);
-			if(!spd) {
-				spd = list_create(ni->pool);
-			}
-			if(!spd) { 
-				printf("Can'nt create SPD\n");
-				return false;
-			}
-			if(!ni_config_put(ni, SPD_IN, spd)) {
-				list_destroy(spd);
-				printf("Can'nt add SPD\n");
-				return false;
-			}
-			break;
 		case DIRECTION_OUT:
-			spd = ni_config_get(ni, SPD_OUT);
-			if(!spd) {
-				spd = list_create(ni->pool);
-			}
-			if(!spd) { 
-				printf("Can'nt create SPD\n");
-				return false;
-			}
-			if(!ni_config_put(ni, SPD_OUT, spd)) {
-				list_destroy(spd);
-				printf("Can'nt add SPD\n");
-				return false;
-			}
+			database = spd->out_database;
+			break;
+		case DIRECTION_IN:
+			database = spd->in_database;
 			break;
 	}
 
-	return list_add_at(spd, priority, sp);
+	bool result = list_add_at(database, priority, sp);
+
+	return result;
 }
 
-SP* spd_remove_sp(NetworkInterface* ni, uint8_t direction, int index) {
-	List* spd = NULL;
+bool spd_remove_sp(NetworkInterface* ni, uint8_t direction, int index) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	List* database = NULL;
 	switch(direction) {
-		case DIRECTION_IN:
-			spd = ni_config_get(ni, SPD_IN);
-			break;
 		case DIRECTION_OUT:
-			spd = ni_config_get(ni, SPD_OUT);
+			database = spd->out_database;
+			break;
+		case DIRECTION_IN:
+			database = spd->in_database;
 			break;
 	}
-	if(!spd)
-		return NULL;
 
-	SP* sp = list_remove(spd, index);
-	if(!sp) {
-		printf("Can'nt found SP\n");
-		return NULL;
-	}
-
-	if(list_is_empty(spd)) {
-		list_destroy(spd);
-		switch(direction) {
-			case DIRECTION_IN:
-				ni_config_remove(ni, SPD_IN);
-				break;
-			case DIRECTION_OUT:
-				ni_config_remove(ni, SPD_OUT);
-				break;
-		}
-	}
+	SP* sp = list_remove(database, index);
+	sp_free(sp);
 
 	return sp;
 }
 
 void spd_delete_all(NetworkInterface* ni, uint8_t direction) {
-	List* spd = NULL;
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	List* database = NULL;
 	switch(direction) {
-		case DIRECTION_IN:
-			spd = ni_config_get(ni, SPD_IN);
-			break;
 		case DIRECTION_OUT:
-			spd = ni_config_get(ni, SPD_OUT);
+			database = spd->out_database;
+			break;
+		case DIRECTION_IN:
+			database = spd->in_database;
 			break;
 	}
-	if(!spd)
-		return;
 
 	ListIterator iter;
-	list_iterator_init(&iter, spd);
-
+	list_iterator_init(&iter, database);
 	while((list_iterator_has_next(&iter))) {
 		SP* sp = list_iterator_remove(&iter);
 		sp_free(sp);
 	}
+}
+
+/* SPD Read & Write Lock */
+inline void spd_inbound_rlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->in_rwlock;
+
+	rwlock_read_lock(rwlock);
+}
+
+inline void spd_inbound_un_rlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->in_rwlock;
+
+	rwlock_read_unlock(rwlock);
+}
+
+inline void spd_inbound_wlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->in_rwlock;
+
+	rwlock_write_lock(rwlock);
+}
+
+inline void spd_inbound_un_wlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->in_rwlock;
+
+	rwlock_write_unlock(rwlock);
+}
+
+inline void spd_outbound_rlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->out_rwlock;
+
+	rwlock_read_lock(rwlock);
+}
+
+inline void spd_outbound_un_rlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->out_rwlock;
+
+	rwlock_read_unlock(rwlock);
+}
+
+inline void spd_outbound_wlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->out_rwlock;
+
+	rwlock_write_lock(rwlock);
+}
+
+inline void spd_outbound_un_wlock(NetworkInterface* ni) {
+	SPD* spd = ni_config_get(ni, IPSEC_SPD);
+	RWLock* rwlock = spd->out_rwlock;
+
+	rwlock_write_unlock(rwlock);
 }

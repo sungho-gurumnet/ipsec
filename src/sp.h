@@ -79,7 +79,7 @@ typedef struct _SP{
 SP* sp_alloc(NetworkInterface* ni, uint64_t* attrs);
 bool sp_free(SP* sp);
 bool sp_add_content(SP* sp, Content* content, int priority);
-Content* sp_remove_content(SP* sp, int index);
+bool sp_remove_content(SP* sp, int index);
 bool sp_add_sa(SP* sp, SA* sa);
 bool sp_remove_sa(SP* sp, SA* sa);
 SA* sp_get_sa(SP* sp, IP* ip);
