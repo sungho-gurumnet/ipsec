@@ -16,6 +16,7 @@
 #include <net/checksum.h>
 #include <net/udp.h>
 #include <net/tcp.h>
+#include <net/interface.h>
 
 #include <util/cmd.h>
 #include <util/types.h>
@@ -171,22 +172,19 @@ static bool parse_addr(char* argv, uint32_t* address) {
 	char* next = NULL;
 	uint32_t temp;
 
-	for(int i = 0; i < 4; i++) {
+	for(int i = 0; i < 4; i++, argv++) {
 		temp = strtol(argv, &next, 0);
 		if(temp > 0xff)
 			return false;
 
-		*address = (temp & 0xff) << ((3 - i) * 8);
 		if(next == argv)
 			return false;
+
+		if(i != 3 && *next != '.')
+			return false;
+
+		*address |= (temp & 0xff) << ((3 - i) * 8);
 		argv = next;
-
-		if(i != 3 && *argv != '.')
-			return false;
-		else if(i == 3 && *argv != '\0')
-			return false;
-
-		argv++;
 	}
 
 	return true;
@@ -324,6 +322,19 @@ static bool parse_addr_mask_port(char* argv, uint32_t* addr, uint32_t* mask, uin
 
 static int cmd_ip(int argc, char** argv, void(*callback)(char* result, int exit_status)) {
 	if(argc == 1) {
+		int count = ni_count();
+		for(int i = 0; i < count; i++) {
+			NetworkInterface* ni = ni_get(i);
+			Map* interfaces = ni_config_get(ni, NI_ADDR_IPv4);
+			MapIterator iter;
+			map_iterator_init(&iter, interfaces);
+			while(map_iterator_has_next(&iter)) {
+				MapEntry* entry = map_iterator_next(&iter);
+				printf("eth%d ", i);
+				dump_addr((uint32_t)(uint64_t)entry->key);
+				printf("\n");
+			}
+		}
 		//dump
 	}
 
