@@ -304,7 +304,11 @@ static bool parse_addr_mask_port(char* argv, uint32_t* addr, uint32_t* mask, uin
 			return false;
 
 		argv = next;
-		*mask = *mask << (32 - _mask);
+
+		if(_mask == 0)
+			*mask = 0;
+		else
+			*mask = *mask << (32 - _mask);
 	}
 	if(*argv == ':') {
 		argv++;

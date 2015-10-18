@@ -37,13 +37,13 @@
 
 	-s [address][/mask][:port]
 		Source specification.
-		defalut address = any
+		default address = any
 		default mask = 32
 		default port = any
 
 	-d [address][/mask][:port]
 		Destination specificiation.
-		defalut address = any
+		default address = any
 		default mask = 24
 		default port = any
 
@@ -72,25 +72,25 @@
 		tunnel[source address-destination address] -- tunnel mode
 		transport -- transport mode
 
-	-E encapsulating security payload method[key: HEX][spi: HEX]
-		des_cbc -- key length: 8 Bytes
-		3des_cbc -- key length: 24 Bytes
-		blowfish_cbc -- key length: 5 ~ 56 Bytes
-		cast128_cbc -- key length: 5 ~ 56 Bytes
-		rijndael_cbc -- key length: 16, 24, 32 Bytes
-		camellia_cbc -- key length: 16, 24, 32 Bytes
-		aes_ctr -- key length: 16
+	-E encapsulating security payload method
+		des_cbc
+		3des_cbc
+		blowfish_cbc
+		cast128_cbc
+		rijndael_cbc
+		camellia_cbc
+		aes_ctr
 		twofish_cbc -- not yet support
 		des_deriv -- not yet support
 		3des_deriv -- not yet support
 
-	-A authentication method[key: HEX][spi: HEX]
-		hmac_md5 -- key length: 16 Bytes
-		hmac_sha1 -- key length: 20 Bytes
-		hmac_sha256 -- key length: 32 Bytes
-		hmac_sha384 -- key length: 48 Bytes
-		hmac_sha512 -- key length: 64 Bytes
-		hmac_ripemd160 -- key length: 20 Bytes
+	-A authentication method
+		hmac_md5
+		hmac_sha1
+		hmac_sha256
+		hmac_sha384
+		hmac_sha512
+		hmac_ripemd160
 		keyed_md5 -- not yet support
 		keyed_sha1 -- not yet support
 		aes_xcbc_mac -- not yet support
@@ -117,13 +117,13 @@
 
 	-s [address][/mask][:port]
 		Source specification.
-		defalut address = any
+		default address = any
 		default mask = 32
 		default port = any
 
 	-d [address][/mask][:port]
 		Destination specificiation.
-		defalut address = any
+		default address = any
 		default mask = 24
 		default port = any
 
@@ -131,7 +131,7 @@
 		des_cbc -- key length: 8 Bytes
 		3des_cbc -- key length: 24 Bytes
 		blowfish_cbc -- key length: 5 ~ 56 Bytes
-		cast128_cbc -- key length: 5 ~ 56 Bytes
+		cast128_cbc -- key length: 5 ~ 16 Bytes
 		rijndael_cbc -- key length: 16, 24, 32 Bytes
 		camellia_cbc -- key length: 16, 24, 32 Bytes
 		aes_ctr -- key length: 16
