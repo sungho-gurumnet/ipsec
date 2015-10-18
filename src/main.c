@@ -1312,14 +1312,18 @@ static int cmd_sp(int argc, char** argv, void(*callback)(char* result, int exit_
 			}
 
 			SPD* spd = spd_get(ni);
-			spd_outbound_rlock(ni);
-			dump_database(spd->out_database);
-			spd_outbound_un_rlock(ni);
-
-			spd_inbound_rlock(ni);
-			dump_database(spd->in_database);
-			spd_inbound_un_rlock(ni);
-
+			switch(direction) {
+				case DIRECTION_OUT:
+					spd_outbound_rlock(ni);
+					dump_database(spd->out_database);
+					spd_outbound_un_rlock(ni);
+				break;
+				case DIRECTION_IN:
+					spd_inbound_rlock(ni);
+					dump_database(spd->in_database);
+					spd_inbound_un_rlock(ni);
+				break;
+			}
 			printf("\n");
 		}
 		uint16_t count = ni_count();
