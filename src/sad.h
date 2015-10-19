@@ -1,26 +1,27 @@
-#ifndef __SAD_H__
-#define __SAD_H__
+#ifndef __sad_H__
+#define __sad_H__
 
-#include <stdio.h>
-#include <stdint.h>
-#include <net/ip.h>
-#include <net/ether.h>
-#include "esp.h"
+#include <stdbool.h>
+
 #include "sa.h"
-#include "sp.h"
+#include "rwlock.h"
 
-#define true 	1
-#define false 	0
+#define	IPSEC_SAD	"net.ipsec.sad"
 
-typedef struct
-{
-	SA* sa_list;
-	size_t max_size;
-	size_t size;
-}SAD;
+typedef struct _SAD {
+	Map* database;
+	RWLock* rwlock;
+} SAD;
 
-SAD sad;
+bool sad_init();
+SAD* sad_get(NetworkInterface* ni);
+void sad_remove_all(NetworkInterface* ni);
+SA* sad_get_sa(NetworkInterface* ni, uint32_t spi, uint32_t dst_ip, uint8_t protocol);
+bool sad_add_sa(NetworkInterface* ni, SA* sa);
+bool sad_remove_sa(NetworkInterface* ni, uint32_t spi, uint32_t dest_ip, uint8_t protocol);
 
-SA* getSA(IP* packet);
-SA* findSA(SA* current_sa, SP* current_sp, IP* packet);
+void sad_rlock(NetworkInterface* ni);
+void sad_un_rlock(NetworkInterface* ni); 
+void sad_wlock(NetworkInterface* ni);
+void sad_un_wlock(NetworkInterface* ni); 
 #endif

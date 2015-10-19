@@ -1,31 +1,17 @@
 #ifndef __IPSEC_H__
 #define __IPSEC_H__
 
-#include <stdio.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <net/ip.h>
-#include <net/checksum.h>
-#include <net/ether.h>
-#include "spd.h"
-#include "sad.h"
-#include "crypto.h"
-#include "auth.h"
-#include "receiver.h"
+#include <stdbool.h>
+#include <net/packet.h>
 
-#define true 	1
-#define false 	0
+/* Action */
+#define IPSEC_ACTION_BYPASS		0x00
+#define IPSEC_ACTION_IPSEC		0x01
 
-void init_list();
-int encrypt(IP* packet);
-int decrypt(IP* packet);
+#define IPSEC_MODE_TRANSPORT 		0x01
+#define IPSEC_MODE_TUNNEL 		0x02
 
-SP* current_sp;
-SA* current_sa;
-
+bool ipsec_process(Packet* packet);
+bool ipsec_init();
 
 #endif /* __IPSEC_H__ */
-
-
-extern Window window;
-

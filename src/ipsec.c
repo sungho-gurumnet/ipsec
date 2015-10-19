@@ -1,275 +1,526 @@
+#include <net/ether.h>
+#include <net/arp.h>
+#include <net/icmp.h>
+#include <net/ip.h>
+#include <net/tcp.h>
+#include <net/checksum.h>
+#include <util/event.h>
+
 #include "ipsec.h"
+#include "esp.h"
+#include "ah.h"
+#include "socket.h"
+#include "spd.h"
+#include "sad.h"
+#include "ike.h"
+#include "mode.h"
 
-void init_list()
-{
-	SP* sp_header_node = (SP*)malloc(sizeof(SP));
-	SA* sa_header_node = (SA*)malloc(sizeof(SA));
+#define DEBUG	0
 
-	spd.sp_list = sp_header_node;
-	sad.sa_list = sa_header_node;
-	
-	INIT_LIST_HEAD(&((spd.sp_list)->list));
-	INIT_LIST_HEAD(&((sad.sa_list)->list));
+bool ipsec_init() {
+	printf("PacketNgin IPSec\n\n");
+	printf("Initialize SAD...\n");
+	if(!sad_init()) {
+		printf("Initializing SAD is fail!!!\n");
+		return false;
+	}
+	printf("SAD initialized\n\n");
+	printf("Initialize SPD...\n");
+	if(!spd_init()) {
+		printf("Initializing SPD is fail!!!\n");
+		return false;
+	}
+	printf("SPD initialized\n\n");
+	printf("PacketNgin IPSec Start\n");
 
-	spd.size = 0;
-	sad.size = 0;
+	return true;
 }
 
-int decrypt(IP* packet)
-{
-	int size; 
-	current_sa = NULL;
-	current_sp = NULL;
-	ESP* esp;
-	IP* ip;
-
-	printf("Decrypt Processing : \n");
-
-	// 1. SAD Lookup
-	if((current_sa = getSA(packet)) == NULL)
-	{
-		printf(" 1. SAD Lookup : Discard packet \n");
-	
-		return -1;
-	}
-	
-	current_sa->crypto = get_cryptography(current_sa->esp_crypto_algorithm);
-	current_sa->auth = get_authentication(current_sa->esp_auth_algorithm);
+static bool ipsec_decrypt(Packet* packet, SA* sa) { 
+	Ether* ether = (Ether*)(packet->buffer + packet->start);
+        IP* ip = (IP*)ether->payload;
 
 	// 2. Seq# Validation
-	esp = (ESP*)packet->body;
+	ESP* esp = (ESP*)ip->body;
 
-	if(checkWindow(current_sa->window, esp->seq_num) < 0)
-	{
-		printf(" 2. Seq# Validation : Dicard Packet \n");
-
-		return -1;
-	}
-
-	// 3. ICV Validation
-	if(current_sa->iv_mode == true)
-	{
-		size = endian16(packet->length) - (packet->ihl * 4) - ICV_LEN; 
-		
-		unsigned char* result = (unsigned char*)malloc(12);
-		
-		((Authentication*)(current_sa->auth))->authenticate(&(packet->body), size, result);
-	
-		if(memcmp(result, &(packet->body[size]), 12) != 0)
-		{
+	int size = endian16(ip->length) - (ip->ihl * 4) - ICV_LEN;
+	uint8_t result[12];
+	if(((SA_ESP*)sa)->auth) {
+		((Authentication*)(((SA_ESP*)sa)->auth))->authenticate(&(ip->body), size, result, sa);
+		if(memcmp(result, ip->body + size, 12) != 0) {
+#if DEBUG
 			printf(" 3. ICV Validation : Discard Packet \n");
-			
-			return -1;
+#endif
+			return false;
 		}
 	}
 
-	switch(current_sa->protocol)
-	{
-		case IP_PROTOCOL_ESP :
-			// 4. Decrypt
-			size = endian16(packet->length) - (packet->ihl * 4) - ESP_HEADER_LEN; 
-			
-			if(current_sa->iv_mode == true)
-				size -= ICV_LEN;
-			
-			((Cryptography*)(current_sa->crypto))->decrypt(esp, size); 
-			
-			// 5. ESP Header & Trailer Deletion
-			int packet_protocol;
-			int packet_len = endian16(packet->length) - ESP_HEADER_LEN - esp->body[size - 2] /* Padding */ - ESP_TRAILER_LEN;
-			
-			if(current_sa->mode == TRANSPORT)
-			{
-				packet_protocol = esp->body[size - 1];
-				memmove(packet->body, esp->body, size);
-			}
-			else if(current_sa->mode == TUNNEL)
-			{
-				ip = (IP*)esp->body;
-				packet_protocol = ip->protocol;
-				packet_len -= (packet->ihl * 4);
-				memmove(packet, esp->body, size);
-			}
-			
-			packet->protocol = packet_protocol;
-			packet->length = endian16(packet_len);
-			
-			if(current_sa->iv_mode == true) 
-				packet->length = endian16(packet_len - ICV_LEN);
-		
-			break;
-		
-		case IP_PROTOCOL_AH : 	
-			break;
-		default : break;
-	}
+	((Cryptography*)(((SA_ESP*)sa)->crypto))->decrypt(esp, size, (SA_ESP*)sa); 
 	
+	// 5. ESP Header & Trailer Deletion
+	ESP_T* esp_trailer = (ESP_T*)(ip->body + endian16(ip->length) - (ip->ihl * 4) - ESP_TRAILER_LEN);
+	int padding_len = esp_trailer->pad_len;
+	if(sa->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+		ip->protocol = esp_trailer->next_hdr;
+		ip->ttl--;
+		transport_unset(packet, ESP_HEADER_LEN, padding_len + ESP_TRAILER_LEN);
+
+	} else if(sa->ipsec_mode == IPSEC_MODE_TUNNEL) {
+		tunnel_unset(packet, ESP_HEADER_LEN, padding_len + ESP_TRAILER_LEN);
+	}
+
+	return true;
+}
+
+static bool ipsec_encrypt(Packet* packet, Content* content, SA* sa) {
+	Ether* ether = (Ether*)(packet->buffer + packet->start);
+        IP* ip = (IP*)ether->payload;
+
+	int padding_len = (endian16(ip->length) + 2) % 8;
+	if(padding_len != 0)
+		padding_len = 8 - padding_len;
+
+	if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+		if(!transport_set(packet, ESP_HEADER_LEN, padding_len + ESP_TRAILER_LEN))
+			return false;
+	} else if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+		if(!tunnel_set(packet, ESP_HEADER_LEN, padding_len + ESP_TRAILER_LEN))
+			return false;
+	}
+
+	ether = (Ether*)(packet->buffer + packet->start);
+        ip = (IP*)ether->payload;
+	//Set ESP Trailer
+	ESP_T* esp_trailer = (ESP_T*)(ip->body + endian16(ip->length) - (ip->ihl * 4) - ESP_TRAILER_LEN);
+	esp_trailer->pad_len = padding_len;
+	if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+		esp_trailer->next_hdr = ip->protocol;
+	} else if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+		esp_trailer->next_hdr = IP_PROTOCOL_IP;
+	}
+
+	ESP* esp = (ESP*)ip->body;
+	// 5. Seq# Validation
+	((Cryptography*)(((SA_ESP*)sa)->crypto))->encrypt(esp, endian16(ip->length) - IP_LEN - ESP_HEADER_LEN, (SA_ESP*)sa);
+	esp->seq_num = endian32(window_get_seq_counter(sa->window));
+	esp->spi = endian32(sa->spi);
+	
+	if(((SA_ESP*)sa)->auth) {
+		int size = endian16(ip->length) - IP_LEN;
+		((Authentication*)(((SA_ESP*)sa)->auth))->authenticate(ip->body, size, ip->body + size, sa);
+		ip->length = endian16(endian16(ip->length) + ICV_LEN);
+		packet->end += ICV_LEN;
+	}
+
+	ip->protocol = IP_PROTOCOL_ESP;
+
+	switch(content->ipsec_mode) {
+		case IPSEC_MODE_TRANSPORT:
+			ip->ttl--;
+			ip->checksum = 0;
+			ip->checksum = endian16(checksum(ip, ip->ihl * 4));
+			break;
+		case IPSEC_MODE_TUNNEL:
+			ip->ttl = IP_TTL;
+			ip->source = endian32(((Content_ESP_Tunnel*)content)->t_src_ip);
+			ip->destination = endian32(((Content_ESP_Tunnel*)content)->t_dest_ip);
+			ip->checksum = 0;
+			ip->checksum = endian16(checksum(ip, ip->ihl * 4));
+			break;
+	}
+
+	return true;
+}
+
+//Check auth
+static bool ipsec_proof(Packet* packet, SA* sa) {
+	Ether* ether = (Ether*)(packet->buffer + packet->start);
+        IP* ip = (IP*)ether->payload;
+	AH* ah = (AH*)ip->body;
+
+	uint8_t ecn = ip->ecn;
+	uint8_t dscp = ip->dscp;
+	uint16_t flags_offset = ip->flags_offset;
+	uint8_t ttl = ip->ttl;
+	uint8_t auth_data[AUTH_DATA_LEN];
+	memcpy(auth_data, ah->auth_data, AUTH_DATA_LEN);
+
+	//Authenticate
+	ip->ecn = 0; //tos
+	ip->dscp = 0; //tos
+	ip->ttl = 0;
+	ip->flags_offset = 0;
+	ip->checksum = 0;
+	memset(ah->auth_data, 0, AUTH_DATA_LEN);
+
+	((Authentication*)(((SA_AH*)sa)->auth))->authenticate(ip, endian16(ip->length), ah->auth_data, sa);
+
+	if(memcmp(auth_data, ah->auth_data, AUTH_DATA_LEN)) {
+		return false;
+	}
+
+	ip->ecn = ecn;
+	ip->dscp = dscp;
+	ip->ttl = ttl;
+
+	if(ah->next_hdr == IP_PROTOCOL_IP)
+		//Tunnel mode
+		tunnel_unset(packet, AH_HEADER_LEN, 0);
+	else {
+		//Transport mode
+		ip->protocol = ah->next_hdr;
+		transport_unset(packet, AH_HEADER_LEN, 0);
+		ip->ecn = ecn;
+		ip->dscp = dscp;
+		ip->ttl = ttl;
+		ip->flags_offset = flags_offset;
+		ip->checksum = endian16(checksum(ip, ip->ihl * 4));
+	}
+
+	return true;
+}
+
+static bool ipsec_auth(Packet* packet, Content* content, SA* sa) {
+	Ether* ether = NULL;
+        IP* ip = NULL;
+	AH* ah = NULL;
+
+	if(content->ipsec_mode == IPSEC_MODE_TRANSPORT) {
+		if(!transport_set(packet, AH_HEADER_LEN, 0))
+			return false;
+
+		ether = (Ether*)(packet->buffer + packet->start);
+		ip = (IP*)ether->payload;
+		ah = (AH*)ip->body;
+
+		//ip->length = endian16(endian16(ip->length) + AH_HEADER_LEN + ICV_LEN);
+		ah->next_hdr = ip->protocol;
+	} else if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+		if(!tunnel_set(packet, AH_HEADER_LEN, 0))
+			return false;
+
+		ether = (Ether*)(packet->buffer + packet->start);
+		ip = (IP*)ether->payload;
+		ah = (AH*)ip->body;
+
+		//ip->length = endian16(endian16(ip->length) + IP_LEN + AH_HEADER_LEN + ICV_LEN);
+		ah->next_hdr = IP_PROTOCOL_IP;
+	}
+
+	ah->len = AH_LEN; //check
+	ah->spi = endian32(sa->spi);
+	ah->seq_num = endian32(++sa->window->seq_counter);
+
+	uint8_t ecn = ip->ecn;
+	uint8_t dscp = ip->dscp;
+	uint8_t ttl = ip->ttl;
+	uint16_t flags_offset = ip->flags_offset;
+
+	ip->ecn = 0;
+	ip->dscp = 0;
+	ip->ttl = 0;
+	ip->protocol = IP_PROTOCOL_AH;
+	ip->flags_offset = 0;
+	ip->checksum = 0;
+	memset(ah->auth_data, 0, ICV_LEN);
+
+	if(content->ipsec_mode == IPSEC_MODE_TUNNEL) {
+			ip->source = endian32(((Content_AH_Tunnel*)content)->t_src_ip);
+			ip->destination = endian32(((Content_AH_Tunnel*)content)->t_dest_ip);
+	}
+
+	((Authentication*)(((SA_AH*)sa)->auth))->authenticate(ip, endian16(ip->length), ah->auth_data, sa);
+
+	switch(content->ipsec_mode) {
+		case IPSEC_MODE_TRANSPORT:
+			ip->ttl = ttl - 1;
+			break;
+		case IPSEC_MODE_TUNNEL:
+			ip->ttl = IP_TTL;
+			break;
+	}
+	ip->ecn = ecn;
+	ip->dscp = dscp;
+	ip->ttl = ttl;
+	ip->flags_offset = flags_offset;
+
+
+	ip->checksum = endian16(checksum(ip, ip->ihl * 4));
+
+	return true;
+}
+
+static bool inbound_process(Packet* packet) {
+#if DEBUG
+	printf("inbound process\n");
+#endif
+	Ether* ether = (Ether*)(packet->buffer + packet->start);
+        IP* ip = (IP*)ether->payload;
+
+	NetworkInterface* ni = packet->ni;
+	List* sa_list = list_create(ni->pool);
+	SA* sa = NULL;
+	spd_inbound_rlock(ni);
+	sad_rlock(ni);
+	while((ip->protocol == IP_PROTOCOL_ESP) || (ip->protocol == IP_PROTOCOL_AH)) {
+		switch(ip->protocol) {
+			case IP_PROTOCOL_ESP:
+				;
+				ESP* esp = (ESP*)ip->body;
+				sa = sad_get_sa(ni, endian32(esp->spi), endian32(ip->destination), ip->protocol);
+				if(!sa) {
+#if DEBUG
+					printf("Can'nt found SA\n");
+#endif
+					goto error;
+				}
+				if(!ipsec_decrypt(packet, sa)) {
+					goto error;
+				}
+				break;
+
+			case IP_PROTOCOL_AH:
+				;
+				AH* ah = (AH*)ip->body;
+				sa = sad_get_sa(ni, endian32(ah->spi), endian32(ip->destination), ip->protocol);
+				if(!sa) {
+#if DEBUG
+					printf("Can'nt found SA\n");
+#endif
+					goto error;
+				}
+				if(!ipsec_proof(packet, sa)) {
+					goto error;
+				}
+				break;
+		}
+
+		list_add_at(sa_list, 0, sa);
+		ether = (Ether*)(packet->buffer + packet->start);
+		ip = (IP*)ether->payload;
+	}
+
 	// 6. SPD Lookup 
-	if((current_sp = getSP(packet)) == NULL)
-	{
-		printf(" 6. SPD Lookup : Discard packet \n");
-
-		return -1;
+	SP* sp = spd_get_sp(ni, DIRECTION_IN, ip);
+	if(!sp) {
+#if DEBUG
+		printf("Can'nt found SP\n");
+#endif
+		goto error;
 	}
 
-	printf("Decrypted Packet : \n");
-	
-	Ether* ether = (Ether*)malloc(250);
-	memmove(ether->payload, packet, 250) ; 
-	int i;
-	for(i = 1; i < 1 + endian16(packet->length); i++)
-	{
-		printf("%02x ", ether->payload[i - 1]); // Packet - IP Header 
-		if( i % 16 == 0 )
-			printf("\n");
+	// 7. Verification
+	if(!sp_verify_sa(sp, sa_list, ip)) {
+		goto error;
 	}
-	printf("\n");
 
-	free(ether);
 	
-	return 0;
+	ether = (Ether*)(packet->buffer + packet->start);
+        ip = (IP*)ether->payload;
+	ether->smac = endian48(sp->out_ni->mac);
+	ether->dmac = endian48(arp_get_mac(sp->out_ni, endian32(ip->destination), endian32(ip->source)));
+	ether->type = endian16(ETHER_TYPE_IPv4);
+
+	ni_output(sp->out_ni, packet);
+	spd_inbound_un_rlock(ni);
+	sad_un_rlock(ni);
+	list_destroy(sa_list);
+
+	return true;
+
+error:
+	spd_inbound_un_rlock(ni);
+	sad_un_rlock(ni);
+	ni_free(packet);
+	list_destroy(sa_list);
+
+	return true;
 }
 
-int encrypt(IP* packet)
-{
-	int size, body_len, padding_len, i;
-	unsigned char* padding = NULL;
-	current_sp = NULL;
-	current_sa = NULL;
-
-	printf("Encrypt Processing : \n");
+static bool outbound_process(Packet* packet) {
+#if DEBUG
+	printf("outbound process\n");
+#endif
+	NetworkInterface* ni = packet->ni;
+	Ether* ether = (Ether*)(packet->buffer + packet->start);
+        IP* ip = (IP*)ether->payload;
 	
-	// 1. SPD Lookup
-	if((current_sp = getSP(packet)) == NULL)
-	{
-		printf(" 1. SPD Lookup : Bypass packet\n");
+	Socket* socket = NULL;
+	SP* sp = NULL;
+	SA* sa = NULL;
+
+	spd_outbound_rlock(ni);
+	sad_rlock(ni);
+	if(ip->protocol == IP_PROTOCOL_TCP) { //tcp use socket pointer 
+		TCP* tcp = (TCP*)ip->body;
+		socket = socket_get(ni, endian32(ip->source), endian16(tcp->source));
+		if(socket) {
+			/*This Packet Is TCP Packet*/
+			sp = socket->sp;
+			sa = socket->sa;
+			if(tcp->fin) {
+				socket->fin = true;
+				bool delete_socket(void* context) {
+					//delete socket
+					return false;
+				}
+				event_timer_add(delete_socket, socket, 5000000, 5000000);
+				//socket free
+				//TODO timer event
+				//socket_delete(endian32(ip->source), endian16(tcp->source));
+			}
+			goto tcp_packet;
+		}
+	}
+
+	if(!sp)
+		sp = spd_get_sp(packet->ni, DIRECTION_OUT, ip);
+
+	if(!sp) {
+#if DEBUG
+		printf("Can't found sp\n");
+#endif
+		spd_outbound_un_rlock(ni);
+		sad_un_rlock(ni);
+		return false;
+	}
+
+tcp_packet:
+	if(sp->ipsec_action == IPSEC_ACTION_BYPASS) {
+		if((ip->protocol == IP_PROTOCOL_TCP && !socket)) {
+			TCP* tcp = (TCP*)ip->body;
+			socket = socket_create(ni, sp, NULL);
+			socket_add(ni, endian32(ip->source), endian16(tcp->source), socket);
+		}
 		
-		return -1;
+		//set dmac
+		ni_output(sp->out_ni, packet);
+		spd_outbound_un_rlock(ni);
+		sad_un_rlock(ni);
+
+		return true;
 	}
 
-	// 2. SAD Lookup
-	if((current_sa = findSA(current_sp->sa_pointer, current_sp, packet)) == NULL)
-	{
-		printf(" 2. SAD check : Discard packet\n");
-		
-		return -1;
-	}
-	current_sa->crypto = get_cryptography(current_sa->esp_crypto_algorithm);
-	current_sa->auth = get_authentication(current_sa->esp_auth_algorithm);
-
-	switch(current_sa->protocol)
-	{
-		case IP_PROTOCOL_ESP :
-			// 3. ESP Trailer Addition & Encrypt
-			body_len = endian16(packet->length) - (packet->ihl * 4);
-		
-			if(current_sa->mode == TRANSPORT)
-			{
-				padding_len = (ESP_HEADER_LEN + body_len + 2) % 8;
-				if(padding_len != 0)
-					padding_len = 8 - (ESP_HEADER_LEN + body_len + 2) % 8;
-			}
-			else if(current_sa->mode == TUNNEL)
-			{
-				padding_len = (packet->ihl * 4 + ESP_HEADER_LEN + body_len + 2) % 16;
-				if(padding_len != 0)
-					padding_len = 16 - (packet->ihl * 4 + ESP_HEADER_LEN + body_len + 2) % 16;
-			}
-
-			padding = packet->body + body_len;
-			
-			for(i = 0; i < padding_len; i++)
-				padding[i] = i + 1;
-			
-			packet->body[body_len + padding_len + 1] = packet->protocol;
-			packet->body[body_len + padding_len] = padding_len;
-
-			size = body_len + padding_len + 2;
-			
-			if(current_sa->mode == TUNNEL)
-			{
-				//  3.1 Inner IP Addition
-				packet->ttl--;
-				packet->checksum = 0;
-				packet->checksum = endian16(checksum(packet, packet->ihl * 4));
-
-				packet->body[body_len + padding_len + 1] = IP_PROTOCOL_IPV4;
-
-				memmove(packet->body, packet, endian16(packet->length) + padding_len + ESP_TRAILER_LEN);
-				// TODO : Hop Limit Check
-
-				size += packet->ihl * 4;
-			}
-	
-			((Cryptography*)(current_sa->crypto))->encrypt(packet->body, size);		
-	
-			// 4. IP Header Change & ESP Header Addition
-			packet->protocol = IP_PROTOCOL_ESP;
-			packet->length = endian16(endian16(packet->length) + ESP_HEADER_LEN + ESP_TRAILER_LEN + padding_len);
-			
-			//  4.1 IP Header Change
-			if(current_sa->mode == TRANSPORT)
-			{
-				packet->source = endian32(packet->destination);
-				packet->destination = endian32(packet->source);
-			}
-			else if(current_sa->mode == TUNNEL)
-			{
-				packet->length = endian16(endian16(packet->length) + packet->ihl * 4);
-				packet->source = endian32(current_sp->t_src_ip);
-				packet->destination = endian32(current_sp->t_dst_ip);
-			}
-
-			if(current_sa->iv_mode == true)
-			{
-				packet->length += endian16(ICV_LEN);
-			}
-
-			packet->ttl = endian8(64);
-			packet->checksum = 0;
-			packet->checksum = endian16(checksum(packet, packet->ihl * 4));
-			
-			// 4.2 ESP Header Addition
-			memmove(packet->body + ESP_HEADER_LEN, packet->body, endian16(packet->length) - packet->ihl * 4 - ESP_HEADER_LEN);
-			
-			ESP* esp = (ESP*)packet->body;
-			esp->spi = endian32(current_sa->spi);
-			esp->iv = current_sa->iv;	
-			
-			// 5. Seq# Validation 
-			esp->seq_num = endian32(++current_sa->window->seq_counter);
-			// TODO : Seq# Overflow Check
-			
-			// 6. ICV Calculation
-			if(current_sa->iv_mode == true)
-			{
-				size = endian16(packet->length) - (packet->ihl * 4) - ICV_LEN; 
-				unsigned char* result = &(packet->body[size]);
-				((Authentication*)(current_sa->auth))->authenticate(&(packet->body), size, result);
-			}
-			break;
-		case IP_PROTOCOL_AH :
-			break;
-		default : 
-			break;
+	//get already pointed SA, SA bundle
+	if(!sa) {
+		sa = sp_get_sa(sp, ip);
+#if DEBUG
+		if(sa)
+			printf("SA get\n");
+#endif
 	}
 
-
-	printf("Encrypted Packet : \n");
-
-	Ether* ether1 = (Ether*)malloc(250);
-	memmove(ether1->payload, packet, 250) ; 
-	
-	for(i = 1; i < 1 + endian16(packet->length) ; i++) 
-	{
-		printf("%02x ", ether1->payload[i - 1]); // Packet - IP Header 
-		if( i % 16 == 0 )
-			printf("\n");
+	if(!sa) {
+		//get SA, SA bundle from sad
+		sa = sp_find_sa(sp, ip);
+#if DEBUG
+		if(sa)
+			printf("SA find\n");
+#endif
 	}
-	printf("\n");
-	
-	free(ether1);
 
-	return 0;
+	if(!sa) {
+		sa = ike_sa_get(ip, sp); //this function not work;
+#if DEBUG
+		if(sa)
+			printf("SA get from ike\n");
+#endif
+	}
+
+	if(!sa) {
+		ni_free(packet);
+		spd_outbound_un_rlock(ni);
+		sad_un_rlock(ni);
+#if DEBUG
+		printf("Can'nt found SA\n");
+#endif
+
+		return true;
+	}
+
+	if(ip->protocol == IP_PROTOCOL_TCP) {
+		TCP* tcp = (TCP*)ip->body;
+		Socket* socket = socket_create(ni, sp, sa);
+		socket_add(ni, endian32(ip->source), endian16(tcp->source), socket);
+	}
+
+	ListIterator iter;
+	list_iterator_init(&iter, sp->contents);
+	while(list_iterator_has_next(&iter)) {
+		Content* content = list_iterator_next(&iter);
+
+		if(!sa) {
+			ni_free(packet);
+			spd_outbound_un_rlock(ni);
+			sad_un_rlock(ni);
+#if DEBUG
+			printf("Can'nt found SA\n");
+#endif
+			return true;
+		}
+
+		switch(content->ipsec_protocol) {
+			case IP_PROTOCOL_ESP:
+				if(!ipsec_encrypt(packet, content, sa)) {
+					ni_free(packet);
+					spd_outbound_un_rlock(ni);
+					sad_un_rlock(ni);
+#if DEBUG
+					printf("Can'nt encrypt packet\n");
+#endif
+					return true;
+				}
+				break;
+
+			case IP_PROTOCOL_AH:
+				if(!ipsec_auth(packet, content, sa)) {
+					ni_free(packet);
+					spd_outbound_un_rlock(ni);
+					sad_un_rlock(ni);
+#if DEBUG
+					printf("Can'nt authenticate packet\n");
+#endif
+					return true;
+				}
+				break;
+		}
+
+		sa = sa->next;
+	}
+
+	ether = (Ether*)(packet->buffer + packet->start);
+        ip = (IP*)ether->payload;
+	ether->smac = endian48(sp->out_ni->mac);
+	ether->dmac = endian48(arp_get_mac(sp->out_ni, endian32(ip->destination), endian32(ip->source)));
+	ether->type = endian16(ETHER_TYPE_IPv4);
+
+	ni_output(sp->out_ni, packet);
+	spd_outbound_un_rlock(ni);
+	sad_un_rlock(ni);
+
+	return true;
 }
 
+bool ipsec_process(Packet* packet) {
+	if(arp_process(packet))
+		return true;
+
+ 	if(icmp_process(packet))
+ 		return true;
+
+	Ether* ether = (Ether*)(packet->buffer + packet->start);
+	if(endian16(ether->type) == ETHER_TYPE_IPv4) {
+		if(outbound_process(packet)) {
+			return true;
+		}
+
+		if(inbound_process(packet)) {
+			return true;
+		}
+
+
+		return false;
+	}
+
+	return false;
+}

@@ -10,9 +10,11 @@
 #include <openssl/camellia.h>
 #include <openssl/rand.h>
 #include <net/ether.h>
+
 #include "sa.h"
 #include "esp.h"
 
+#define CRYPTO_NONE			0x00
 #define CRYPTO_DES_CBC			0x01
 #define CRYPTO_3DES_CBC			0x02
 #define CRYPTO_BLOWFISH_CBC		0x03
@@ -24,14 +26,10 @@
 #define CRYPTO_AES_CTR			0x09
 #define CRYPTO_CAMELLIA_CBC		0x10
 
-typedef struct 
-{
-	void(*encrypt)(void* payload, size_t size);
-	void(*decrypt)(void* payload, size_t size);
+typedef struct _Cryptography{
+	void(*encrypt)(ESP* esp, size_t size, SA_ESP* sa);
+	void(*decrypt)(ESP* esp, size_t size, SA_ESP* sa);
 } Cryptography;
 
 Cryptography* get_cryptography(int algorithm);
-
-void _3des_cbc_decrypt(void* payload, size_t size); 
-extern SA* current_sa;
 #endif 
